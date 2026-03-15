@@ -3,47 +3,97 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI 방 꾸미기 데모</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    input, select, button { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
-    button { cursor: pointer; }
-    .result { white-space: pre-wrap; background: #fafafa; border-radius: 10px; padding: 12px; border: 1px solid #eee; }
-  </style>
+  <title>AI Room Styler</title>
+  <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <h1>AI 방 꾸미기 데모</h1>
-  <p>방 정보 입력 → 추천 가구 자동 생성</p>
-
-  <div class="card">
-    <div class="row">
-      <input id="width" type="number" placeholder="폭(cm) 예: 280" value="280" />
-      <input id="length" type="number" placeholder="길이(cm) 예: 340" value="340" />
-      <input id="budget" type="number" placeholder="예산(원)" value="1200000" />
+  <div class="container">
+    <div class="topbar">
+      <div class="logo">room<span>pilot</span></div>
+      <div class="meta">오늘의집 스타일 AI 공간 추천 데모</div>
     </div>
-    <div class="row" style="margin-top:10px;">
-      <select id="mood">
-        <option value="minimal_warm">minimal_warm</option>
-        <option value="minimal_white">minimal_white</option>
-        <option value="luxury_warm">luxury_warm</option>
-      </select>
-      <select id="purpose">
-        <option value="work_sleep">work_sleep</option>
-        <option value="focus_work">focus_work</option>
-        <option value="sleep_storage">sleep_storage</option>
-      </select>
-      <button onclick="runDemo()">추천 받기</button>
-    </div>
-  </div>
 
-  <div class="card">
-    <h3>추천 결과</h3>
-    <div id="out" class="result">아직 실행 전</div>
+    <div class="layout">
+      <aside class="panel">
+        <h1>내 방 맞춤 추천</h1>
+        <p class="meta">방 치수, 무드, 예산 입력하면 실제 배치 가능한 SKU를 자동 추천해줘.</p>
+
+        <div class="grid2">
+          <div class="field">
+            <label>폭 (cm)</label>
+            <input id="width" type="number" value="280" />
+          </div>
+          <div class="field">
+            <label>길이 (cm)</label>
+            <input id="length" type="number" value="340" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>예산 (원)</label>
+          <input id="budget" type="number" value="1200000" />
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>무드</label>
+            <select id="mood">
+              <option value="minimal_warm">minimal_warm</option>
+              <option value="minimal_white">minimal_white</option>
+              <option value="scandinavian_light">scandinavian_light</option>
+              <option value="modern_dark">modern_dark</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>용도</label>
+            <select id="purpose">
+              <option value="work_sleep">work_sleep</option>
+              <option value="focus_work">focus_work</option>
+              <option value="sleep_storage">sleep_storage</option>
+              <option value="gaming_focus">gaming_focus</option>
+            </select>
+          </div>
+        </div>
+
+        <button onclick="runDemo()">추천 받기</button>
+        <p class="note">* 지금은 2D 휴리스틱 기반 추천이며, 다음 단계에서 이미지 스캔/실측 추정이 붙습니다.</p>
+      </aside>
+
+      <main class="results">
+        <h2>추천 결과</h2>
+        <div class="kpi">
+          <div class="box"><div class="label">총 가격</div><div id="kpiPrice" class="value">-</div></div>
+          <div class="box"><div class="label">공간 적합도</div><div id="kpiFit" class="value">-</div></div>
+          <div class="box"><div class="label">스타일 점수</div><div id="kpiStyle" class="value">-</div></div>
+        </div>
+        <div id="items" class="items"></div>
+      </main>
+    </div>
   </div>
 
 <script>
+const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n);
+
+function renderItems(items = []) {
+  const root = document.getElementById('items');
+  if (!items.length) {
+    root.innerHTML = '<p class="meta">아직 추천 결과가 없습니다.</p>';
+    return;
+  }
+
+  root.innerHTML = items.map(item => `
+    <article class="item">
+      <span class="badge">${item.category}</span>
+      <h3>${item.name}</h3>
+      <p>가격: ${fmt(item.price_krw)}원</p>
+      <p>치수: ${item.dimensions_cm.width} x ${item.dimensions_cm.depth} x ${item.dimensions_cm.height} cm</p>
+      <p>추천 사유: ${item.reason}</p>
+      <p>점수: ${item.score}</p>
+      <a href="${item.url}" target="_blank" rel="noreferrer">상품 보러가기</a>
+    </article>
+  `).join('');
+}
+
 async function runDemo() {
   const width = Number(document.getElementById('width').value);
   const length = Number(document.getElementById('length').value);
@@ -53,22 +103,27 @@ async function runDemo() {
 
   const estimateRes = await fetch('/v1/room/estimate', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ width_cm: width, length_cm: length, budget_krw: budget, mood, purpose })
   });
-
   const estimateData = await estimateRes.json();
-  const roomId = estimateData.room_profile.room_id;
 
   const recRes = await fetch('/v1/recommendations', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ room_id: roomId, required_categories: ['bed','desk','chair','storage'] })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room_id: estimateData.room_profile.room_id, required_categories: ['bed', 'desk', 'chair', 'storage'] })
   });
-
   const recData = await recRes.json();
-  document.getElementById('out').textContent = JSON.stringify(recData, null, 2);
+
+  const s = recData.summary || {};
+  document.getElementById('kpiPrice').textContent = s.total_price_krw ? `${fmt(s.total_price_krw)}원` : '-';
+  document.getElementById('kpiFit').textContent = s.fit_score ?? '-';
+  document.getElementById('kpiStyle').textContent = s.style_score ?? '-';
+
+  renderItems(recData.items || []);
 }
+
+renderItems();
 </script>
 </body>
 </html>

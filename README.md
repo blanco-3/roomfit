@@ -6,11 +6,13 @@
 - PRD v0.1 (`docs/PRD.md`)
 - DB 스키마 + API 명세 (`docs/TECH_SPEC.md`)
 - 4주 스프린트 계획 (`docs/SPRINT_PLAN.md`)
+- SKU 파이프라인 문서 (`docs/DATA_PIPELINE.md`)
 - FastAPI API 서버 (`app/main.py`)
 - SQLite 영속 저장 (`app/db.py`, `data/roomstyler.db`)
 - 추천 엔진 모듈 (`app/recommender.py`)
-- 샘플 카탈로그 (`data/furniture_catalog.json`)
-- 기본 웹 데모 (`app/static/index.html`)
+- 대량 카탈로그 생성기 (`scripts/generate_catalog.py`)
+- 샘플/확장 카탈로그 (`data/furniture_catalog.json`)
+- 오늘의집 스타일 웹 데모 (`app/static/index.html`, `app/static/styles.css`)
 - API 테스트 (`tests/test_api.py`)
 - Docker 실행 파일 (`Dockerfile`, `docker-compose.yml`)
 
@@ -24,6 +26,11 @@ uvicorn app.main:app --reload --port 8080
 
 - 앱: http://localhost:8080/
 - API 문서: http://localhost:8080/docs
+
+## SKU 대량 생성
+```bash
+python3 scripts/generate_catalog.py
+```
 
 ## 테스트
 ```bash
@@ -44,4 +51,4 @@ docker compose up --build
 1. Postgres 전환 + Alembic 마이그레이션
 2. 이미지 업로드 + depth/segmentation 연동
 3. 추천 explainability 강화 및 A/B 실험 로깅
-4. 외부 쇼핑몰 카탈로그 수집 파이프라인 자동화
+4. 실 쇼핑몰 커넥터 + 정규화 파이프라인 자동화
