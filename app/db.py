@@ -119,6 +119,22 @@ def init_db() -> None:
             )
             """
         )
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cv_jobs (
+              job_id TEXT PRIMARY KEY,
+              room_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              result_json TEXT,
+              error_text TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY(room_id) REFERENCES room_profiles(room_id),
+              FOREIGN KEY(user_id) REFERENCES users(user_id)
+            )
+            """
+        )
 
 
 def log_event(event_type: str, message: str, *, level: str = "info", context: Optional[dict] = None) -> str:
@@ -226,6 +242,54 @@ def get_room(room_id: str) -> Optional[dict]:
     with conn() as c:
         row = c.execute("SELECT * FROM room_profiles WHERE room_id = ?", (room_id,)).fetchone()
     return dict(row) if row else None
+
+
+def count_room_photos(room_id: str) -> int:
+    with conn() as c:
+        row = c.execute("SELECT COUNT(*) as cnt FROM room_photos WHERE room_id = ?", (room_id,)).fetchone()
+    return int(row["cnt"] if row else 0)
+
+
+def create_cv_job(room_id: str, user_id: str) -> str:
+    job_id = str(uuid.uuid4())
+    with conn() as c:
+        c.execute(
+            "INSERT INTO cv_jobs (job_id, room_id, user_id, status) VALUES (?, ?, ?, ?)",
+            (job_id, room_id, user_id, "queued"),
+        )
+    return job_id
+
+
+def update_cv_job(job_id: str, status: str, *, result: Optional[dict] = None, error_text: Optional[str] = None) -> None:
+    with conn() as c:
+        c.execute(
+            """
+            UPDATE cv_jobs
+            SET status = ?, result_json = ?, error_text = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE job_id = ?
+            """,
+            (status, json.dumps(result, ensure_ascii=False) if result else None, error_text, job_id),
+        )
+
+
+def get_cv_job(job_id: str) -> Optional[dict]:
+    with conn() as c:
+        row = c.execute(
+            "SELECT job_id, room_id, user_id, status, result_json, error_text, created_at, updated_at FROM cv_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    if item.get("result_json"):
+        try:
+            item["result"] = json.loads(item["result_json"])
+        except Exception:
+            item["result"] = None
+    else:
+        item["result"] = None
+    item.pop("result_json", None)
+    return item
 
 
 def save_room_photo(room_id: str, original_name: str, file_bytes: bytes) -> dict:

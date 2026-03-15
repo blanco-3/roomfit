@@ -84,3 +84,34 @@ def test_recommendation_history_endpoint():
     assert 'items' in data
     assert len(data['items']) >= 1
     assert {'run_id', 'room_id', 'total_price_krw'}.issubset(data['items'][0].keys())
+
+
+def test_cv_job_mocked_estimation_flow():
+    headers = auth_headers()
+
+    est = client.post('/v1/room/estimate', json={
+        'width_cm': 320,
+        'length_cm': 360,
+        'height_cm': 245,
+        'mood': 'minimal_warm',
+        'purpose': 'work_sleep',
+        'budget_krw': 1500000,
+    }, headers=headers)
+    room_id = est.json()['room_profile']['room_id']
+
+    files = [
+        ('files', ('a.jpg', b'fakeimg1', 'image/jpeg')),
+        ('files', ('b.jpg', b'fakeimg2', 'image/jpeg')),
+    ]
+    up = client.post('/v1/room/photos', data={'room_id': room_id}, files=files, headers=headers)
+    assert up.status_code == 200
+
+    created = client.post(f'/v1/cv/jobs?room_id={room_id}', headers=headers)
+    assert created.status_code == 200
+    job = created.json()['job']
+    assert job['status'] in ('completed', 'running', 'queued')
+
+    read_back = client.get(f"/v1/cv/jobs/{job['job_id']}", headers=headers)
+    assert read_back.status_code == 200
+    job2 = read_back.json()['job']
+    assert 'result' in job2

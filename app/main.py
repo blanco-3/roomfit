@@ -7,10 +7,14 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFil
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.cv_worker import mock_measurement_estimation
 from app.db import (
     authenticate_user,
+    count_room_photos,
+    create_cv_job,
     create_token,
     create_user,
+    get_cv_job,
     get_room,
     get_user_by_token,
     init_db,
@@ -21,6 +25,7 @@ from app.db import (
     save_recommendation,
     save_room,
     save_room_photo,
+    update_cv_job,
 )
 from app.recommender import recommend
 from app.schemas import LoginRequest, RecommendationRequest, RegisterRequest, RoomEstimateRequest
@@ -189,6 +194,46 @@ def recommendation_history(limit: int = Query(20, ge=1, le=100), authorization: 
     user = get_current_user(authorization)
     items = list_recommendation_runs(user_id=user["user_id"], limit=limit)
     return {"count": len(items), "items": items}
+
+
+@app.post("/v1/cv/jobs")
+def create_room_cv_job(room_id: str = Query(...), authorization: Optional[str] = Header(None)):
+    user = get_current_user(authorization)
+    room = get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="room_id not found")
+    if room["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    photo_count = count_room_photos(room_id)
+    if photo_count < 2:
+        raise HTTPException(status_code=400, detail="at least 2 uploaded photos required before CV job")
+
+    job_id = create_cv_job(room_id=room_id, user_id=user["user_id"])
+    log_event("cv.job.queued", "cv estimation job queued", context={"job_id": job_id, "room_id": room_id})
+
+    try:
+        update_cv_job(job_id, "running")
+        result = mock_measurement_estimation(room)
+        update_cv_job(job_id, "completed", result=result)
+        log_event("cv.job.completed", "cv estimation job completed", context={"job_id": job_id, "room_id": room_id})
+    except Exception as e:
+        update_cv_job(job_id, "failed", error_text=str(e))
+        log_event("cv.job.failed", "cv estimation job failed", level="error", context={"job_id": job_id, "error": str(e)})
+
+    item = get_cv_job(job_id)
+    return {"job": item}
+
+
+@app.get("/v1/cv/jobs/{job_id}")
+def get_room_cv_job(job_id: str, authorization: Optional[str] = Header(None)):
+    user = get_current_user(authorization)
+    job = get_cv_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    if job["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="forbidden")
+    return {"job": job}
 
 
 @app.get("/v1/ops/logs")

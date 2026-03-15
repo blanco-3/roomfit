@@ -13,6 +13,7 @@
 - **DB 백엔드 추상화 스캐폴드** (`DATABASE_URL` 기반, SQLite 기본 / Postgres 전환 경로 준비)
 - **운영 로그 테이블 + API** (`/v1/ops/logs`) 및 간단 대시보드 (`/ops`)
 - **추천 실행 히스토리 API** (`/v1/recommendations/history`) + 메인 UI 히스토리 패널
+- **CV 작업 스캐폴드 + 모의 실측 추정** (`POST /v1/cv/jobs`, `GET /v1/cv/jobs/{job_id}`)
 
 ## 실행
 ```bash

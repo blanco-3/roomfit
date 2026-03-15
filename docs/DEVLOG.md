@@ -35,3 +35,19 @@
 - Next:
   - Add CV worker scaffolding + async job model with mocked room measurement estimation.
   - Migrate startup hook to lifespan (remove deprecation warnings).
+
+## 2026-03-16 04:21 KST
+- Implemented CV-worker scaffolding (cost-free mock path):
+  - Added `app/cv_worker.py` with mocked measurement estimation heuristic.
+  - Added async-job style DB model in `cv_jobs` table.
+  - Added DB helpers: create/update/get CV jobs + room photo count helper.
+  - Added APIs:
+    - `POST /v1/cv/jobs?room_id=...` (queue + run mock estimation)
+    - `GET /v1/cv/jobs/{job_id}` (job 상태/결과 조회)
+- Added test coverage for end-to-end mocked CV job flow including photo upload.
+- Tests:
+  - `PYTHONPATH=. .venv/bin/pytest -q`
+  - Result: **5 passed**.
+- Next:
+  - Remove FastAPI startup deprecation warning using lifespan.
+  - Add migration-ready SQL docs/scripts for Postgres transition.
