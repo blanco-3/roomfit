@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 방 꾸미기 데모</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    input, select, button { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+    button { cursor: pointer; }
+    .result { white-space: pre-wrap; background: #fafafa; border-radius: 10px; padding: 12px; border: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h1>AI 방 꾸미기 데모</h1>
+  <p>방 정보 입력 → 추천 가구 자동 생성</p>
+
+  <div class="card">
+    <div class="row">
+      <input id="width" type="number" placeholder="폭(cm) 예: 280" value="280" />
+      <input id="length" type="number" placeholder="길이(cm) 예: 340" value="340" />
+      <input id="budget" type="number" placeholder="예산(원)" value="1200000" />
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <select id="mood">
+        <option value="minimal_warm">minimal_warm</option>
+        <option value="minimal_white">minimal_white</option>
+        <option value="luxury_warm">luxury_warm</option>
+      </select>
+      <select id="purpose">
+        <option value="work_sleep">work_sleep</option>
+        <option value="focus_work">focus_work</option>
+        <option value="sleep_storage">sleep_storage</option>
+      </select>
+      <button onclick="runDemo()">추천 받기</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>추천 결과</h3>
+    <div id="out" class="result">아직 실행 전</div>
+  </div>
+
+<script>
+async function runDemo() {
+  const width = Number(document.getElementById('width').value);
+  const length = Number(document.getElementById('length').value);
+  const budget = Number(document.getElementById('budget').value);
+  const mood = document.getElementById('mood').value;
+  const purpose = document.getElementById('purpose').value;
+
+  const estimateRes = await fetch('/v1/room/estimate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ width_cm: width, length_cm: length, budget_krw: budget, mood, purpose })
+  });
+
+  const estimateData = await estimateRes.json();
+  const roomId = estimateData.room_profile.room_id;
+
+  const recRes = await fetch('/v1/recommendations', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ room_id: roomId, required_categories: ['bed','desk','chair','storage'] })
+  });
+
+  const recData = await recRes.json();
+  document.getElementById('out').textContent = JSON.stringify(recData, null, 2);
+}
+</script>
+</body>
+</html>

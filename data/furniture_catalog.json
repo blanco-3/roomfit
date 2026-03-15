@@ -1,0 +1,12 @@
+[
+  {"id":"bed_001","source":"ikea","name":"MALM Bed Frame","category":"bed","width_cm":166,"depth_cm":209,"height_cm":100,"price_krw":399000,"style_tags":["minimal","wood","warm"],"url":"https://www.ikea.com/"},
+  {"id":"bed_002","source":"coupang","name":"Simple Single Bed","category":"bed","width_cm":110,"depth_cm":205,"height_cm":95,"price_krw":219000,"style_tags":["minimal","white"],"url":"https://www.coupang.com/"},
+  {"id":"desk_001","source":"ikea","name":"LAGKAPTEN Desk","category":"desk","width_cm":120,"depth_cm":60,"height_cm":74,"price_krw":99000,"style_tags":["minimal","white"],"url":"https://www.ikea.com/"},
+  {"id":"desk_002","source":"coupang","name":"Oak Work Desk","category":"desk","width_cm":140,"depth_cm":70,"height_cm":74,"price_krw":189000,"style_tags":["wood","warm","natural"],"url":"https://www.coupang.com/"},
+  {"id":"chair_001","source":"ikea","name":"MARKUS Chair","category":"chair","width_cm":62,"depth_cm":60,"height_cm":129,"price_krw":229000,"style_tags":["minimal","black"],"url":"https://www.ikea.com/"},
+  {"id":"chair_002","source":"coupang","name":"Cream Fabric Chair","category":"chair","width_cm":58,"depth_cm":58,"height_cm":88,"price_krw":129000,"style_tags":["warm","cream","minimal"],"url":"https://www.coupang.com/"},
+  {"id":"storage_001","source":"ikea","name":"KALLAX Shelf","category":"storage","width_cm":77,"depth_cm":39,"height_cm":147,"price_krw":79000,"style_tags":["minimal","white"],"url":"https://www.ikea.com/"},
+  {"id":"storage_002","source":"zara_home","name":"Walnut Cabinet","category":"storage","width_cm":90,"depth_cm":42,"height_cm":160,"price_krw":349000,"style_tags":["wood","luxury","warm"],"url":"https://www.zarahome.com/"},
+  {"id":"sofa_001","source":"ikea","name":"Compact 2-seat Sofa","category":"sofa","width_cm":145,"depth_cm":82,"height_cm":85,"price_krw":429000,"style_tags":["minimal","gray"],"url":"https://www.ikea.com/"},
+  {"id":"table_001","source":"coupang","name":"Round Side Table","category":"table","width_cm":50,"depth_cm":50,"height_cm":45,"price_krw":59000,"style_tags":["warm","minimal"],"url":"https://www.coupang.com/"}
+]
