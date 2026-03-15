@@ -2,22 +2,31 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
-import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from app.db_backend import PostgresBackendNotImplemented, SQLiteBackend, parse_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "data" / "roomstyler.db"
+DEFAULT_DB_PATH = BASE_DIR / "data" / "roomstyler.db"
 CATALOG_PATH = BASE_DIR / "data" / "furniture_catalog.json"
 UPLOAD_DIR = BASE_DIR / "data" / "uploads"
 
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
-def conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_PATH)
-    c.row_factory = sqlite3.Row
-    return c
+_cfg = parse_database_url(DATABASE_URL)
+if _cfg.engine == "sqlite":
+    _db = SQLiteBackend(Path(_cfg.database))
+else:
+    _db = PostgresBackendNotImplemented(_cfg.database)
+
+
+def conn():
+    return _db.connect()
 
 
 def hash_password(password: str, salt: str) -> str:
@@ -25,7 +34,11 @@ def hash_password(password: str, salt: str) -> str:
 
 
 def init_db() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if _cfg.engine != "sqlite":
+        return
+
+    db_path = Path(_cfg.database)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with conn() as c:
         c.execute(
@@ -94,6 +107,51 @@ def init_db() -> None:
             )
             """
         )
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ops_logs (
+              log_id TEXT PRIMARY KEY,
+              event_type TEXT NOT NULL,
+              level TEXT NOT NULL,
+              message TEXT NOT NULL,
+              context_json TEXT NOT NULL,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+
+def log_event(event_type: str, message: str, *, level: str = "info", context: Optional[dict] = None) -> str:
+    log_id = str(uuid.uuid4())
+    with conn() as c:
+        c.execute(
+            "INSERT INTO ops_logs (log_id, event_type, level, message, context_json) VALUES (?, ?, ?, ?, ?)",
+            (
+                log_id,
+                event_type,
+                level,
+                message,
+                json.dumps(context or {}, ensure_ascii=False),
+            ),
+        )
+    return log_id
+
+
+def list_ops_logs(limit: int = 50) -> list[dict]:
+    with conn() as c:
+        rows = c.execute(
+            "SELECT log_id, event_type, level, message, context_json, created_at FROM ops_logs ORDER BY created_at DESC LIMIT ?",
+            (max(1, min(limit, 200)),),
+        ).fetchall()
+    out = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["context"] = json.loads(item.pop("context_json"))
+        except Exception:
+            item["context"] = {"raw": item.pop("context_json")}
+        out.append(item)
+    return out
 
 
 def create_user(email: str, password: str, display_name: str) -> dict:

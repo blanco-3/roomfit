@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roomfit Ops Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; background: #f7f7f9; color: #222; }
+    h1 { margin: 0 0 12px; }
+    .bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    input, button { padding: 8px 10px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; }
+    th, td { border-bottom: 1px solid #eee; text-align: left; padding: 10px; font-size: 13px; vertical-align: top; }
+    th { background: #fafafa; }
+    code { white-space: pre-wrap; }
+    .muted { color: #777; }
+  </style>
+</head>
+<body>
+  <h1>Roomfit Ops Logs</h1>
+  <p class="muted">Bearer 토큰을 넣고 최근 운영 로그를 조회합니다.</p>
+
+  <div class="bar">
+    <input id="token" placeholder="Bearer token" style="flex:1" />
+    <input id="limit" type="number" value="50" min="1" max="200" style="width:90px" />
+    <button id="load">불러오기</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>created_at</th>
+        <th>level</th>
+        <th>event_type</th>
+        <th>message</th>
+        <th>context</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    async function loadLogs() {
+      const token = document.getElementById('token').value.trim();
+      const limit = document.getElementById('limit').value || '50';
+      const rows = document.getElementById('rows');
+      rows.innerHTML = '<tr><td colspan="5">loading...</td></tr>';
+
+      const res = await fetch(`/v1/ops/logs?limit=${encodeURIComponent(limit)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        rows.innerHTML = `<tr><td colspan="5">error: ${res.status}</td></tr>`;
+        return;
+      }
+      const data = await res.json();
+      rows.innerHTML = data.items.map(item => `
+        <tr>
+          <td>${item.created_at}</td>
+          <td>${item.level}</td>
+          <td>${item.event_type}</td>
+          <td>${item.message}</td>
+          <td><code>${JSON.stringify(item.context ?? {}, null, 2)}</code></td>
+        </tr>
+      `).join('');
+    }
+
+    document.getElementById('load').addEventListener('click', loadLogs);
+  </script>
+</body>
+</html>

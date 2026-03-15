@@ -48,3 +48,13 @@ def test_estimate_and_recommend():
     assert 'summary' in data
     assert 'items' in data
     assert 'run_id' in data
+
+
+def test_ops_logs_endpoint():
+    headers = auth_headers()
+    r = client.get('/v1/ops/logs?limit=5', headers=headers)
+    assert r.status_code == 200
+    payload = r.json()
+    assert 'items' in payload
+    assert isinstance(payload['items'], list)
+    assert len(payload['items']) >= 1

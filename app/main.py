@@ -14,7 +14,9 @@ from app.db import (
     get_room,
     get_user_by_token,
     init_db,
+    list_ops_logs,
     load_catalog,
+    log_event,
     save_recommendation,
     save_room,
     save_room_photo,
@@ -24,7 +26,7 @@ from app.schemas import LoginRequest, RecommendationRequest, RegisterRequest, Ro
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-app = FastAPI(title="AI Room Styler", version="0.3.0")
+app = FastAPI(title="AI Room Styler", version="0.4.0")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), name="static")
 
 
@@ -43,9 +45,18 @@ def on_startup() -> None:
     init_db()
 
 
+# Ensure DB schema is available during tests/import usage without lifespan hooks.
+init_db()
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     return (BASE_DIR / "app" / "static" / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/ops", response_class=HTMLResponse)
+def ops_dashboard() -> str:
+    return (BASE_DIR / "app" / "static" / "ops.html").read_text(encoding="utf-8")
 
 
 @app.get("/health")
@@ -57,6 +68,7 @@ def health() -> dict:
 def auth_register(payload: RegisterRequest):
     try:
         user = create_user(payload.email, payload.password, payload.display_name)
+        log_event("auth.register", "user registered", context={"user_id": user["user_id"], "email": user["email"]})
     except Exception as e:
         raise HTTPException(status_code=400, detail="Email already exists") from e
     token = create_token(user["user_id"])
@@ -67,8 +79,10 @@ def auth_register(payload: RegisterRequest):
 def auth_login(payload: LoginRequest):
     user = authenticate_user(payload.email, payload.password)
     if not user:
+        log_event("auth.login", "login failed", level="warn", context={"email": payload.email})
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token(user["user_id"])
+    log_event("auth.login", "login success", context={"user_id": user["user_id"]})
     return {"token": token, "user": user}
 
 
@@ -120,6 +134,7 @@ async def upload_room_photos(
         content = await f.read()
         saved.append(save_room_photo(room_id, f.filename or "photo.jpg", content))
 
+    log_event("room.photos.upload", "room photos uploaded", context={"room_id": room_id, "count": len(saved)})
     return {
         "room_id": room_id,
         "uploaded_count": len(saved),
@@ -142,6 +157,7 @@ def get_catalog(category: Optional[str] = Query(None), max_price: Optional[int] 
 def room_estimate(payload: RoomEstimateRequest, authorization: Optional[str] = Header(None)):
     user = get_current_user(authorization)
     room = save_room(user["user_id"], payload.model_dump())
+    log_event("room.estimate", "room profile estimated", context={"room_id": room["room_id"], "user_id": user["user_id"]})
     return {
         "room_profile": {
             "room_id": room["room_id"],
@@ -163,4 +179,12 @@ def recommendations(payload: RecommendationRequest, authorization: Optional[str]
     result = recommend(room, payload.required_categories, load_catalog())
     run_id = save_recommendation(payload.room_id, result)
     result["run_id"] = run_id
+    log_event("recommendations.run", "recommendation generated", context={"room_id": payload.room_id, "run_id": run_id})
     return result
+
+
+@app.get("/v1/ops/logs")
+def ops_logs(limit: int = Query(50, ge=1, le=200), authorization: Optional[str] = Header(None)):
+    # lightweight protection: reuse standard auth for internal dashboard use
+    _ = get_current_user(authorization)
+    return {"count": limit, "items": list_ops_logs(limit=limit)}
