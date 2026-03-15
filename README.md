@@ -35,7 +35,9 @@ uvicorn app.main:app --reload --port 8080
 - `app/recommender.py` 추천 로직
 - `app/static/index.html` 웹/PWA UI
 - `docs/PHOTO_CAPTURE_GUIDE.md` 다중 사진 촬영 기준
+- `docs/POSTGRES_MIGRATION.md` Postgres 전환 경로
 - `scripts/generate_catalog.py` SKU 생성 파이프라인
+- `scripts/export_sqlite_to_json.py` SQLite 데이터 export 스크립트
 
 ## 다음 단계
 1. 이미지 분석(CV) 워커 붙여 실측 추정 자동화

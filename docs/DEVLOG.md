@@ -51,3 +51,18 @@
 - Next:
   - Remove FastAPI startup deprecation warning using lifespan.
   - Add migration-ready SQL docs/scripts for Postgres transition.
+
+## 2026-03-16 04:22 KST
+- Backend quality hardening:
+  - Switched FastAPI startup handling to `lifespan` (deprecation warning 제거).
+  - Test bootstrap now explicitly initializes DB for deterministic runs.
+- Postgres migration path artifacts added:
+  - `docs/POSTGRES_MIGRATION.md` (cutover strategy + checklist)
+  - `scripts/export_sqlite_to_json.py` (SQLite 데이터 export)
+- README updated with migration/export references.
+- Tests:
+  - `PYTHONPATH=. .venv/bin/pytest -q`
+  - Result: **5 passed** (warnings resolved).
+- Next:
+  - Add richer UX affordances (form validation hints, endpoint-driven status chips).
+  - Prepare worker queue abstraction (in-process now, Redis-ready interface next).

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -32,7 +33,14 @@ from app.schemas import LoginRequest, RecommendationRequest, RegisterRequest, Ro
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-app = FastAPI(title="AI Room Styler", version="0.4.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="AI Room Styler", version="0.5.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), name="static")
 
 
@@ -44,15 +52,6 @@ def get_current_user(authorization: Optional[str]) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
-
-
-# Ensure DB schema is available during tests/import usage without lifespan hooks.
-init_db()
 
 
 @app.get("/", response_class=HTMLResponse)
