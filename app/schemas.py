@@ -1,7 +1,18 @@
 from __future__ import annotations
 
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    display_name: str = Field(..., min_length=2, max_length=40)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
 
 
 class RoomEstimateRequest(BaseModel):

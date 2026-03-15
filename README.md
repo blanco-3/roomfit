@@ -1,22 +1,17 @@
-# AI Room Styler (Pre-Launch Scaffold)
+# AI Room Styler (Roomfit)
 
-방 정보(추후 사진 인식 포함)를 기반으로 실제 배치 가능한 가구 조합을 추천하는 서비스의 출시 직전 스캐폴드입니다.
+방 치수 + 다중 사진 + 무드/용도 기반으로 실제 배치 가능한 가구 SKU를 추천하는 서비스 스캐폴드입니다.
 
-## 포함된 것
-- PRD v0.1 (`docs/PRD.md`)
-- DB 스키마 + API 명세 (`docs/TECH_SPEC.md`)
-- 4주 스프린트 계획 (`docs/SPRINT_PLAN.md`)
-- SKU 파이프라인 문서 (`docs/DATA_PIPELINE.md`)
-- FastAPI API 서버 (`app/main.py`)
-- SQLite 영속 저장 (`app/db.py`, `data/roomstyler.db`)
-- 추천 엔진 모듈 (`app/recommender.py`)
-- 대량 카탈로그 생성기 (`scripts/generate_catalog.py`)
-- 샘플/확장 카탈로그 (`data/furniture_catalog.json`)
-- 오늘의집 스타일 웹 데모 (`app/static/index.html`, `app/static/styles.css`)
-- API 테스트 (`tests/test_api.py`)
-- Docker 실행 파일 (`Dockerfile`, `docker-compose.yml`)
+## 현재 구현
+- 이메일/비밀번호 로그인 (`/v1/auth/register`, `/v1/auth/login`)
+- 사용자별 room profile 저장
+- 다중 사진 업로드 (`/v1/room/photos`, 2~12장)
+- 촬영 기준 가이드 API (`/v1/scan-guidelines`)
+- 추천 엔진 + 결과 저장
+- 648 SKU 카탈로그
+- 오늘의집 스타일 UI + PWA(모바일 앱처럼 설치 가능)
 
-## 로컬 실행
+## 실행
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -27,28 +22,19 @@ uvicorn app.main:app --reload --port 8080
 - 앱: http://localhost:8080/
 - API 문서: http://localhost:8080/docs
 
-## SKU 대량 생성
-```bash
-python3 scripts/generate_catalog.py
-```
+## 테스트용 계정
+웹에서 바로 가입/로그인 가능. (개발자 계정으로 생성)
 
-## 테스트
-```bash
-pytest -q
-```
+## 주요 파일
+- `app/main.py` API 엔트리
+- `app/db.py` SQLite + 인증 + 업로드 저장
+- `app/recommender.py` 추천 로직
+- `app/static/index.html` 웹/PWA UI
+- `docs/PHOTO_CAPTURE_GUIDE.md` 다중 사진 촬영 기준
+- `scripts/generate_catalog.py` SKU 생성 파이프라인
 
-## Docker 실행
-```bash
-docker compose up --build
-```
-
-## API 흐름
-1. `POST /v1/room/estimate` → room_id 생성/저장
-2. `POST /v1/recommendations` → 추천 결과 + run_id 저장
-3. `GET /v1/catalog` → 카테고리/가격 필터 조회
-
-## 다음 개발 우선순위
-1. Postgres 전환 + Alembic 마이그레이션
-2. 이미지 업로드 + depth/segmentation 연동
-3. 추천 explainability 강화 및 A/B 실험 로깅
-4. 실 쇼핑몰 커넥터 + 정규화 파이프라인 자동화
+## 다음 단계
+1. 이미지 분석(CV) 워커 붙여 실측 추정 자동화
+2. Postgres 전환 + 운영 로그 대시보드
+3. 실쇼핑몰 커넥터 + 증분 동기화
+4. React Native 앱 래퍼(동일 API 사용)

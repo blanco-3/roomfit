@@ -1,0 +1,9 @@
+{
+  "name": "Roomfit",
+  "short_name": "Roomfit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#35c5f0",
+  "icons": []
+}
