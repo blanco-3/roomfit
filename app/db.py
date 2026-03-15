@@ -270,6 +270,22 @@ def save_recommendation(room_id: str, result: dict) -> str:
     return run_id
 
 
+def list_recommendation_runs(user_id: str, limit: int = 20) -> list[dict]:
+    with conn() as c:
+        rows = c.execute(
+            """
+            SELECT rr.run_id, rr.room_id, rr.total_price_krw, rr.fit_score, rr.style_score, rr.selected_count, rr.created_at
+            FROM recommendation_runs rr
+            JOIN room_profiles rp ON rr.room_id = rp.room_id
+            WHERE rp.user_id = ?
+            ORDER BY rr.created_at DESC
+            LIMIT ?
+            """,
+            (user_id, max(1, min(limit, 100))),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def load_catalog() -> list[dict]:
     with open(CATALOG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)

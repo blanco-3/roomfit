@@ -15,6 +15,7 @@ from app.db import (
     get_user_by_token,
     init_db,
     list_ops_logs,
+    list_recommendation_runs,
     load_catalog,
     log_event,
     save_recommendation,
@@ -181,6 +182,13 @@ def recommendations(payload: RecommendationRequest, authorization: Optional[str]
     result["run_id"] = run_id
     log_event("recommendations.run", "recommendation generated", context={"room_id": payload.room_id, "run_id": run_id})
     return result
+
+
+@app.get("/v1/recommendations/history")
+def recommendation_history(limit: int = Query(20, ge=1, le=100), authorization: Optional[str] = Header(None)):
+    user = get_current_user(authorization)
+    items = list_recommendation_runs(user_id=user["user_id"], limit=limit)
+    return {"count": len(items), "items": items}
 
 
 @app.get("/v1/ops/logs")

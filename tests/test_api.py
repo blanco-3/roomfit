@@ -58,3 +58,29 @@ def test_ops_logs_endpoint():
     assert 'items' in payload
     assert isinstance(payload['items'], list)
     assert len(payload['items']) >= 1
+
+
+def test_recommendation_history_endpoint():
+    headers = auth_headers()
+
+    est = client.post('/v1/room/estimate', json={
+        'width_cm': 280,
+        'length_cm': 340,
+        'height_cm': 240,
+        'mood': 'minimal_warm',
+        'purpose': 'work_sleep',
+        'budget_krw': 1200000,
+    }, headers=headers)
+    room_id = est.json()['room_profile']['room_id']
+
+    client.post('/v1/recommendations', json={
+        'room_id': room_id,
+        'required_categories': ['bed', 'desk', 'chair', 'storage']
+    }, headers=headers)
+
+    hist = client.get('/v1/recommendations/history?limit=10', headers=headers)
+    assert hist.status_code == 200
+    data = hist.json()
+    assert 'items' in data
+    assert len(data['items']) >= 1
+    assert {'run_id', 'room_id', 'total_price_krw'}.issubset(data['items'][0].keys())

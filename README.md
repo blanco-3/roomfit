@@ -12,6 +12,7 @@
 - 오늘의집 스타일 UI + PWA(모바일 앱처럼 설치 가능)
 - **DB 백엔드 추상화 스캐폴드** (`DATABASE_URL` 기반, SQLite 기본 / Postgres 전환 경로 준비)
 - **운영 로그 테이블 + API** (`/v1/ops/logs`) 및 간단 대시보드 (`/ops`)
+- **추천 실행 히스토리 API** (`/v1/recommendations/history`) + 메인 UI 히스토리 패널
 
 ## 실행
 ```bash
