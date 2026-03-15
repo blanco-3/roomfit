@@ -1,15 +1,20 @@
-# AI Room Styler Demo (MVP)
+# AI Room Styler (Pre-Launch Scaffold)
 
-사진 기반으로 방 치수를 추정하고, 가구 카탈로그를 기반으로 배치 가능한 추천을 반환하는 데모입니다.
+방 정보(추후 사진 인식 포함)를 기반으로 실제 배치 가능한 가구 조합을 추천하는 서비스의 출시 직전 스캐폴드입니다.
 
 ## 포함된 것
 - PRD v0.1 (`docs/PRD.md`)
 - DB 스키마 + API 명세 (`docs/TECH_SPEC.md`)
 - 4주 스프린트 계획 (`docs/SPRINT_PLAN.md`)
-- FastAPI 백엔드 데모 (`app/main.py`)
+- FastAPI API 서버 (`app/main.py`)
+- SQLite 영속 저장 (`app/db.py`, `data/roomstyler.db`)
+- 추천 엔진 모듈 (`app/recommender.py`)
 - 샘플 카탈로그 (`data/furniture_catalog.json`)
+- 기본 웹 데모 (`app/static/index.html`)
+- API 테스트 (`tests/test_api.py`)
+- Docker 실행 파일 (`Dockerfile`, `docker-compose.yml`)
 
-## 실행
+## 로컬 실행
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -17,15 +22,26 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8080
 ```
 
-브라우저:
 - 앱: http://localhost:8080/
 - API 문서: http://localhost:8080/docs
 
-## 데모 흐름
-1. `/`에서 방 정보(폭/길이/예산/무드/용도) 입력
-2. `POST /v1/room/estimate`로 room profile 생성
-3. `POST /v1/recommendations`로 가구 추천 반환
+## 테스트
+```bash
+pytest -q
+```
 
-## 주의
-- 현재는 **MVP 데모**로, 실측 추정은 단순 휴리스틱/입력 기반입니다.
-- 향후 depth estimation, segmentation, 제휴 API 연동으로 고도화합니다.
+## Docker 실행
+```bash
+docker compose up --build
+```
+
+## API 흐름
+1. `POST /v1/room/estimate` → room_id 생성/저장
+2. `POST /v1/recommendations` → 추천 결과 + run_id 저장
+3. `GET /v1/catalog` → 카테고리/가격 필터 조회
+
+## 다음 개발 우선순위
+1. Postgres 전환 + Alembic 마이그레이션
+2. 이미지 업로드 + depth/segmentation 연동
+3. 추천 explainability 강화 및 A/B 실험 로깅
+4. 외부 쇼핑몰 카탈로그 수집 파이프라인 자동화
