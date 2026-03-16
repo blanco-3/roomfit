@@ -3,256 +3,177 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Roomfit</title>
+  <title>Roomfit Wizard</title>
   <meta name="theme-color" content="#35c5f0" />
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="container">
-    <div class="topbar">
+  <div class="wizard-shell">
+    <header class="topbar">
       <div class="logo">room<span>fit</span></div>
-      <div class="meta">웹 + 앱(PWA) 데모 · 로그인/다중사진 업로드/추천 히스토리 지원</div>
-    </div>
+      <div class="meta">AI 실측 + 모바일 위저드 (PWA)</div>
+    </header>
 
-    <div class="layout">
-      <aside class="panel">
-        <h1>빠른 시작</h1>
-        <div class="field"><label>이메일</label><input id="email" value="dev@roomfit.ai" /></div>
-        <div class="field"><label>비밀번호</label><input id="password" type="password" value="devpass1234" /></div>
+    <div class="steps" id="stepPills"></div>
+
+    <section class="card step" data-step="1">
+      <h2>1) 계정</h2>
+      <p class="meta">로그인 후 진행해요.</p>
+      <div class="field"><label>이메일</label><input id="email" value="dev@roomfit.ai"/></div>
+      <div class="field"><label>비밀번호</label><input id="password" type="password" value="devpass1234"/></div>
+      <div class="grid2"><button onclick="register()">회원가입</button><button onclick="login()">로그인</button></div>
+      <p id="authState" class="note">로그인 필요</p>
+    </section>
+
+    <section class="card step" data-step="2" hidden>
+      <h2>2) 방 기본 정보</h2>
+      <div class="grid2">
+        <div class="field"><label>무드</label><select id="mood"><option>minimal_warm</option><option>minimal_white</option><option>scandinavian_light</option></select></div>
+        <div class="field"><label>용도</label><select id="purpose"><option>work_sleep</option><option>focus_work</option><option>sleep_storage</option></select></div>
+      </div>
+      <div class="field"><label>예산(원)</label><input id="budget" type="number" value="1200000"/></div>
+      <div class="field check"><input id="manualToggle" type="checkbox" onchange="toggleManual()"/> <label for="manualToggle">치수 직접 입력(선택)</label></div>
+      <div id="manualDims" hidden>
         <div class="grid2">
-          <button onclick="register()">회원가입</button>
-          <button onclick="login()">로그인</button>
+          <div class="field"><label>폭(cm)</label><input id="width" type="number" value="280"/></div>
+          <div class="field"><label>길이(cm)</label><input id="length" type="number" value="340"/></div>
         </div>
-        <div class="grid2" style="margin-top:8px;">
-          <button onclick="logout()" style="background:#707a89">로그아웃</button>
-          <button onclick="refreshHistory()" style="background:#13a8d6">히스토리 새로고침</button>
-        </div>
-        <p id="authState" class="note">로그인 필요</p>
+        <div class="field"><label>높이(cm)</label><input id="height" type="number" value="240"/></div>
+      </div>
+      <p id="step2Error" class="error"></p>
+    </section>
 
-        <hr style="margin:14px 0;border:none;border-top:1px solid #eee" />
+    <section class="card step" data-step="3" hidden>
+      <h2>3) 사진 업로드 + 기준 물체</h2>
+      <p class="meta">2~12장, 기준 물체를 포함하면 정확도가 올라갑니다.</p>
+      <div class="field"><label>기준 물체</label><select id="ref"><option value="a4_long">A4 긴 변</option><option value="credit_card">신용카드</option><option value="door_single">싱글 도어</option><option value="desk_standard">120cm 책상</option><option value="single_bed">싱글 침대</option></select></div>
+      <div class="field"><label>방 사진</label><input id="photos" type="file" multiple accept="image/*"/></div>
+      <p id="step3Error" class="error"></p>
+    </section>
 
-        <h2>방 입력</h2>
-        <div class="grid2">
-          <div class="field"><label>폭(cm)</label><input id="width" type="number" value="280" /></div>
-          <div class="field"><label>길이(cm)</label><input id="length" type="number" value="340" /></div>
-        </div>
-        <div class="grid2">
-          <div class="field"><label>높이(cm)</label><input id="height" type="number" value="240" /></div>
-          <div class="field"><label>예산(원)</label><input id="budget" type="number" value="1200000" /></div>
-        </div>
-        <div class="grid2">
-          <div class="field"><label>무드</label><select id="mood"><option>minimal_warm</option><option>minimal_white</option><option>scandinavian_light</option></select></div>
-          <div class="field"><label>용도</label><select id="purpose"><option>work_sleep</option><option>focus_work</option><option>sleep_storage</option></select></div>
-        </div>
+    <section class="card step" data-step="4" hidden>
+      <h2>4) AI 추정 결과 확인/수정</h2>
+      <div id="aiSummary" class="meta">아직 추정 전입니다.</div>
+      <div class="grid2">
+        <div class="field"><label>폭(cm)</label><input id="rvWidth" type="number"/></div>
+        <div class="field"><label>길이(cm)</label><input id="rvLength" type="number"/></div>
+      </div>
+      <div class="field"><label>높이(cm)</label><input id="rvHeight" type="number"/></div>
+      <p class="note">필요 시 수정 후 다음 단계로 넘어가면 반영됩니다.</p>
+      <p id="step4Error" class="error"></p>
+    </section>
 
-        <div class="field">
-          <label>방 사진 (2~12장)</label>
-          <input id="photos" type="file" multiple accept="image/*" />
-        </div>
-        <div class="grid2">
-          <button id="runBtn" onclick="runDemo()">추천 생성</button>
-          <button onclick="fetchGuidelines()">촬영 가이드</button>
-        </div>
+    <section class="card step" data-step="5" hidden>
+      <h2>5) 추천 결과 + 근거/히스토리</h2>
+      <div class="kpi">
+        <div class="box"><div class="label">총 가격</div><div id="kpiPrice" class="value">-</div></div>
+        <div class="box"><div class="label">공간 적합도</div><div id="kpiFit" class="value">-</div></div>
+        <div class="box"><div class="label">스타일 점수</div><div id="kpiStyle" class="value">-</div></div>
+      </div>
+      <h3>추천 품목</h3><div id="items" class="items"></div>
+      <h3>최근 히스토리</h3><div id="history" class="items"></div>
+    </section>
 
-        <p id="roomInfo" class="note"></p>
-      </aside>
-
-      <main class="results">
-        <h2>추천 결과</h2>
-        <div class="kpi">
-          <div class="box"><div class="label">총 가격</div><div id="kpiPrice" class="value">-</div></div>
-          <div class="box"><div class="label">공간 적합도</div><div id="kpiFit" class="value">-</div></div>
-          <div class="box"><div class="label">스타일 점수</div><div id="kpiStyle" class="value">-</div></div>
-        </div>
-        <div id="items" class="items"></div>
-
-        <h2 style="margin-top:18px;">최근 추천 히스토리</h2>
-        <div id="history" class="items"></div>
-
-        <pre id="guide" class="result" style="margin-top:12px;display:none;"></pre>
-      </main>
+    <div class="sticky-cta">
+      <button id="prevBtn" class="ghost" onclick="prevStep()">이전</button>
+      <button id="nextBtn" onclick="nextStep()">다음</button>
     </div>
   </div>
 
 <script>
 let token = localStorage.getItem('roomfit_token') || null;
+let step = 1;
+let roomId = null;
+let aiEstimate = null;
+const totalSteps = 5;
+const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n || 0);
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+
+function headers(json=true){ const h={}; if (json) h['Content-Type']='application/json'; if(token) h['Authorization']=`Bearer ${token}`; return h; }
+function safeJson(r){ return r.json().catch(()=>({})); }
+function setAuthState(t){ document.getElementById('authState').textContent=t; }
+
+function renderStep(){
+  document.querySelectorAll('.step').forEach(el => el.hidden = Number(el.dataset.step)!==step);
+  const pills = [];
+  for(let i=1;i<=totalSteps;i++) pills.push(`<span class="pill ${i===step?'on':''}">${i}</span>`);
+  document.getElementById('stepPills').innerHTML = pills.join('');
+  document.getElementById('prevBtn').disabled = step===1;
+  document.getElementById('nextBtn').textContent = step===5 ? '추천 다시 실행' : '다음';
 }
 
-function authHeaders() {
-  if (!token) return {'Content-Type': 'application/json'};
-  return {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`};
+async function register(){
+  const r = await fetch('/v1/auth/register',{method:'POST',headers:headers(),body:JSON.stringify({email:email.value.trim(),password:password.value,display_name:'Wizard User'})});
+  const d = await safeJson(r); if(!r.ok) return setAuthState('회원가입 실패: '+(d.detail||'error'));
+  token=d.token; localStorage.setItem('roomfit_token',token); setAuthState('로그인됨: '+d.user.email);
+}
+async function login(){
+  const r = await fetch('/v1/auth/login',{method:'POST',headers:headers(),body:JSON.stringify({email:email.value.trim(),password:password.value})});
+  const d = await safeJson(r); if(!r.ok) return setAuthState('로그인 실패: '+(d.detail||'error'));
+  token=d.token; localStorage.setItem('roomfit_token',token); setAuthState('로그인됨: '+d.user.email);
 }
 
-function setAuthState(text) {
-  document.getElementById('authState').textContent = text;
+function toggleManual(){ manualDims.hidden = !manualToggle.checked; }
+
+async function nextStep(){
+  if(step===1){ if(!token) return setAuthState('먼저 로그인해줘요'); step=2; return renderStep(); }
+  if(step===2){
+    step2Error.textContent='';
+    if(Number(budget.value)<100000) return step2Error.textContent='예산은 100,000원 이상 입력';
+    if(manualToggle.checked){
+      const r = await fetch('/v1/room/estimate',{method:'POST',headers:headers(),body:JSON.stringify({width_cm:Number(width.value),length_cm:Number(length.value),height_cm:Number(height.value),mood:mood.value,purpose:purpose.value,budget_krw:Number(budget.value)})});
+      const d = await safeJson(r); if(!r.ok) return step2Error.textContent=(d.detail||'방 정보 저장 실패');
+      roomId = d.room_profile.room_id;
+    }
+    step=3; return renderStep();
+  }
+  if(step===3){
+    step3Error.textContent='';
+    const files = photos.files;
+    if(files.length<2 || files.length>12) return step3Error.textContent='사진 2~12장을 선택해주세요.';
+    const form = new FormData();
+    form.append('reference_object', ref.value); form.append('mood', mood.value); form.append('purpose', purpose.value); form.append('budget_krw', budget.value);
+    if(roomId) form.append('room_id', roomId);
+    for(const f of files) form.append('files', f);
+    const r = await fetch('/v1/room/auto-estimate',{method:'POST',headers:token?{'Authorization':`Bearer ${token}`}:{},body:form});
+    const d = await safeJson(r); if(!r.ok) return step3Error.textContent=(d.detail||'AI 추정 실패');
+    roomId = d.room_profile.room_id; aiEstimate = d.room_profile;
+    rvWidth.value = aiEstimate.width_cm; rvLength.value = aiEstimate.length_cm; rvHeight.value = aiEstimate.height_cm;
+    aiSummary.textContent = `신뢰도 ${Math.round((aiEstimate.estimate_confidence||0)*100)}% · 소스 ${aiEstimate.estimate_source}`;
+    step=4; return renderStep();
+  }
+  if(step===4){
+    step4Error.textContent='';
+    if(!roomId) return step4Error.textContent='room_id 누락';
+    const r = await fetch('/v1/room/estimate',{method:'POST',headers:headers(),body:JSON.stringify({room_id:roomId,width_cm:Number(rvWidth.value),length_cm:Number(rvLength.value),height_cm:Number(rvHeight.value),mood:mood.value,purpose:purpose.value,budget_krw:Number(budget.value),estimate_source:'ai_reviewed',estimate_confidence:aiEstimate?.estimate_confidence||0.5})});
+    const d = await safeJson(r); if(!r.ok) return step4Error.textContent=(d.detail||'치수 저장 실패');
+    await runRecommendation();
+    step=5; return renderStep();
+  }
+  if(step===5){ await runRecommendation(); }
 }
 
-function setBusy(isBusy, text = '추천 생성') {
-  const btn = document.getElementById('runBtn');
-  btn.disabled = isBusy;
-  btn.textContent = isBusy ? '처리 중...' : text;
-}
+function prevStep(){ if(step>1){step--;renderStep();} }
 
-async function safeJson(res) {
-  try { return await res.json(); } catch { return {}; }
-}
-
-async function register() {
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const r = await fetch('/v1/auth/register', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email, password, display_name: 'Developer'})
-  });
-  const d = await safeJson(r);
-  if (!r.ok) return setAuthState('회원가입 실패: ' + (d.detail || 'error'));
-  token = d.token; localStorage.setItem('roomfit_token', token);
-  setAuthState(`로그인됨: ${d.user.email}`);
+async function runRecommendation(){
+  const r = await fetch('/v1/recommendations',{method:'POST',headers:headers(),body:JSON.stringify({room_id:roomId,required_categories:['bed','desk','chair','storage']})});
+  const d = await safeJson(r); if(!r.ok) return;
+  kpiPrice.textContent = d.summary?.total_price_krw ? `${fmt(d.summary.total_price_krw)}원` : '-';
+  kpiFit.textContent = d.summary?.fit_score ?? '-';
+  kpiStyle.textContent = d.summary?.style_score ?? '-';
+  items.innerHTML = (d.items||[]).map(i=>`<article class="item"><span class="badge">${i.category}</span><h3>${i.name}</h3><p>${fmt(i.price_krw)}원</p><p>${i.reason}</p></article>`).join('') || '<p class="meta">결과 없음</p>';
   await refreshHistory();
 }
 
-async function login() {
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const r = await fetch('/v1/auth/login', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email, password})
-  });
-  const d = await safeJson(r);
-  if (!r.ok) return setAuthState('로그인 실패: ' + (d.detail || 'error'));
-  token = d.token; localStorage.setItem('roomfit_token', token);
-  setAuthState(`로그인됨: ${d.user.email}`);
-  await refreshHistory();
+async function refreshHistory(){
+  const r = await fetch('/v1/recommendations/history?limit=8',{headers:headers(false)}); const d = await safeJson(r); if(!r.ok) return;
+  history.innerHTML = (d.items||[]).map(h=>`<article class="item"><span class="badge">run</span><h3>${h.run_id}</h3><p>${fmt(h.total_price_krw)}원 · fit ${h.fit_score}</p><p>${h.created_at}</p></article>`).join('') || '<p class="meta">히스토리 없음</p>';
 }
 
-function logout() {
-  token = null;
-  localStorage.removeItem('roomfit_token');
-  setAuthState('로그아웃됨');
-  renderHistory([]);
-}
-
-const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n);
-
-function renderItems(items = []) {
-  const root = document.getElementById('items');
-  if (!items.length) {
-    root.innerHTML = '<p class="meta">아직 추천 결과가 없습니다.</p>';
-    return;
-  }
-  root.innerHTML = items.map(item => `
-    <article class="item">
-      <span class="badge">${item.category}</span>
-      <h3>${item.name}</h3>
-      <p>가격: ${fmt(item.price_krw)}원</p>
-      <p>치수: ${item.dimensions_cm.width} x ${item.dimensions_cm.depth} x ${item.dimensions_cm.height} cm</p>
-      <p>추천 사유: ${item.reason}</p>
-      <a href="${item.url}" target="_blank" rel="noreferrer">상품 보러가기</a>
-    </article>
-  `).join('');
-}
-
-function renderHistory(items = []) {
-  const root = document.getElementById('history');
-  if (!items.length) {
-    root.innerHTML = '<p class="meta">아직 추천 히스토리가 없습니다.</p>';
-    return;
-  }
-  root.innerHTML = items.map(item => `
-    <article class="item">
-      <span class="badge">run</span>
-      <h3>${item.run_id}</h3>
-      <p>room_id: ${item.room_id}</p>
-      <p>총 가격: ${fmt(item.total_price_krw)}원 · 적합도: ${item.fit_score} · 스타일: ${item.style_score}</p>
-      <p>선택 SKU 수: ${item.selected_count} · 생성: ${item.created_at}</p>
-    </article>
-  `).join('');
-}
-
-async function refreshHistory() {
-  if (!token) return;
-  const r = await fetch('/v1/recommendations/history?limit=8', { headers: authHeaders() });
-  const d = await safeJson(r);
-  if (!r.ok) return;
-  renderHistory(d.items || []);
-}
-
-async function uploadPhotos(roomId) {
-  const files = document.getElementById('photos').files;
-  if (!files.length) return '사진 업로드 생략';
-  const form = new FormData();
-  form.append('room_id', roomId);
-  for (const f of files) form.append('files', f);
-
-  const r = await fetch('/v1/room/photos', {
-    method: 'POST',
-    headers: token ? {'Authorization': `Bearer ${token}`} : {},
-    body: form
-  });
-  const d = await safeJson(r);
-  if (!r.ok) throw new Error(d.detail || '사진 업로드 실패');
-  return `${d.uploaded_count}장 업로드`;
-}
-
-async function runDemo() {
-  if (!token) return setAuthState('먼저 로그인해줘');
-  setBusy(true);
-  try {
-    const width = Number(document.getElementById('width').value);
-    const length = Number(document.getElementById('length').value);
-    const height = Number(document.getElementById('height').value);
-    const budget = Number(document.getElementById('budget').value);
-    const mood = document.getElementById('mood').value;
-    const purpose = document.getElementById('purpose').value;
-
-    const estimateRes = await fetch('/v1/room/estimate', {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ width_cm: width, length_cm: length, height_cm: height, budget_krw: budget, mood, purpose })
-    });
-    const estimateData = await safeJson(estimateRes);
-    if (!estimateRes.ok) return setAuthState('방 생성 실패: ' + (estimateData.detail || 'error'));
-
-    const roomId = estimateData.room_profile.room_id;
-    let uploadMsg = '';
-    try { uploadMsg = await uploadPhotos(roomId); } catch (e) { uploadMsg = e.message; }
-
-    const recRes = await fetch('/v1/recommendations', {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ room_id: roomId, required_categories: ['bed', 'desk', 'chair', 'storage'] })
-    });
-    const recData = await safeJson(recRes);
-    if (!recRes.ok) return setAuthState('추천 실패: ' + (recData.detail || 'error'));
-
-    document.getElementById('roomInfo').textContent = `room_id: ${roomId} · ${uploadMsg}`;
-    const s = recData.summary || {};
-    document.getElementById('kpiPrice').textContent = s.total_price_krw ? `${fmt(s.total_price_krw)}원` : '-';
-    document.getElementById('kpiFit').textContent = s.fit_score ?? '-';
-    document.getElementById('kpiStyle').textContent = s.style_score ?? '-';
-    renderItems(recData.items || []);
-    await refreshHistory();
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function fetchGuidelines() {
-  const r = await fetch('/v1/scan-guidelines');
-  const d = await safeJson(r);
-  const g = document.getElementById('guide');
-  g.style.display = 'block';
-  g.textContent = JSON.stringify(d, null, 2);
-}
-
-if (token) {
-  setAuthState('기존 세션 토큰 감지됨');
-  refreshHistory();
-}
-renderItems();
-renderHistory();
+if(token) setAuthState('기존 세션 토큰 감지됨');
+renderStep();
 </script>
 </body>
 </html>
