@@ -85,3 +85,21 @@
   - Preserved PWA behavior (`manifest` + service worker registration retained).
 - Tests:
   - Added `test_auto_estimate_from_photos_and_recommendation_flow` for new critical path.
+
+## 2026-03-16 09:58 KST
+- Conversion-focused recommendation UX upgrade:
+  - Recommendation payload now includes `alternatives` (top backup SKUs per category).
+  - Added budget clarity metrics in summary (`budget_krw`, `remaining_budget_krw`, `budget_usage_pct`).
+  - Wizard step 5 now renders alternatives, product links, and save/share-ready text summary with copy/share actions.
+- AI estimation UX hardening:
+  - `POST /v1/scan-guidelines` extended with explicit reference object picker metadata.
+  - `POST /v1/room/auto-estimate` now returns `needs_manual_review` and recapture guidance on low confidence.
+  - Step 4 surfaces low-confidence warning and recapture hints.
+- Backend robustness scaffold (idempotency/retry/timeout):
+  - `Idempotency-Key` support for `POST /v1/recommendations` with cached run reuse.
+  - `cv_jobs` extended with idempotency key, retry count, start time, timeout metadata.
+  - CV job creation now reuses same key safely and marks stale running jobs as timeout-failed.
+- Tests:
+  - Added coverage for recommendation idempotency reuse and CV job idempotency reuse.
+  - Extended recommendation/auto-estimate assertions for new response shape.
+  - `PYTHONPATH=. .venv/bin/pytest -q` → **9 passed**.

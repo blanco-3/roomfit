@@ -19,7 +19,7 @@
 
     <section class="card step" data-step="1">
       <h2>1) 계정</h2>
-      <p class="meta">로그인 후 진행해요.</p>
+      <p class="meta">일반 모드: 로그인 후 진행 / 개발자 모드: 자동 로그인</p>
       <div class="field"><label>이메일</label><input id="email" value="dev@roomfit.ai"/></div>
       <div class="field"><label>비밀번호</label><input id="password" type="password" value="devpass1234"/></div>
       <div class="grid2"><button onclick="register()">회원가입</button><button onclick="login()">로그인</button></div>
@@ -28,11 +28,43 @@
 
     <section class="card step" data-step="2" hidden>
       <h2>2) 방 기본 정보</h2>
-      <div class="grid2">
+      <p class="meta">딱딱한 입력 대신, 아래에서 감성/용도/예산을 눌러서 고르세요.</p>
+
+      <div class="field">
+        <label>어떤 분위기를 원하세요?</label>
+        <div class="chips">
+          <button type="button" class="chip" id="moodChipWarm" onclick="pickMood('minimal_warm', 'moodChipWarm')">따뜻하고 아늑한 느낌</button>
+          <button type="button" class="chip" id="moodChipWhite" onclick="pickMood('minimal_white', 'moodChipWhite')">밝고 화이트 미니멀</button>
+          <button type="button" class="chip" id="moodChipScandi" onclick="pickMood('scandinavian_light', 'moodChipScandi')">스칸디 라이트 우드</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>방을 주로 어떻게 쓸까요?</label>
+        <div class="chips">
+          <button type="button" class="chip" id="purposeChipWorkSleep" onclick="pickPurpose('work_sleep', 'purposeChipWorkSleep')">일 + 수면</button>
+          <button type="button" class="chip" id="purposeChipFocus" onclick="pickPurpose('focus_work', 'purposeChipFocus')">집중 작업 위주</button>
+          <button type="button" class="chip" id="purposeChipStorage" onclick="pickPurpose('sleep_storage', 'purposeChipStorage')">수면 + 수납 강화</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>예산은 어느 정도인가요?</label>
+        <div class="chips">
+          <button type="button" class="chip" onclick="pickBudget(800000)">80만 원대</button>
+          <button type="button" class="chip" onclick="pickBudget(1200000)">120만 원대</button>
+          <button type="button" class="chip" onclick="pickBudget(1800000)">180만 원대</button>
+          <button type="button" class="chip" onclick="pickBudget(2500000)">250만 원대+</button>
+        </div>
+      </div>
+
+      <div class="field"><label>직접 입력(선택)</label><input id="budget" type="number" value="1200000"/></div>
+
+      <div class="grid2" style="display:none">
         <div class="field"><label>무드</label><select id="mood"><option>minimal_warm</option><option>minimal_white</option><option>scandinavian_light</option></select></div>
         <div class="field"><label>용도</label><select id="purpose"><option>work_sleep</option><option>focus_work</option><option>sleep_storage</option></select></div>
       </div>
-      <div class="field"><label>예산(원)</label><input id="budget" type="number" value="1200000"/></div>
+
       <div class="field check"><input id="manualToggle" type="checkbox" onchange="toggleManual()"/> <label for="manualToggle">치수 직접 입력(선택)</label></div>
       <div id="manualDims" hidden>
         <div class="grid2">
@@ -46,9 +78,33 @@
 
     <section class="card step" data-step="3" hidden>
       <h2>3) 사진 업로드 + 기준 물체</h2>
-      <p class="meta">2~12장, 기준 물체를 포함하면 정확도가 올라갑니다.</p>
-      <div class="field"><label>기준 물체</label><select id="ref"><option value="a4_long">A4 긴 변</option><option value="credit_card">신용카드</option><option value="door_single">싱글 도어</option><option value="desk_standard">120cm 책상</option><option value="single_bed">싱글 침대</option></select></div>
-      <div class="field"><label>방 사진</label><input id="photos" type="file" multiple accept="image/*"/></div>
+      <p class="meta">정확한 AI 측정을 위해 아래 가이드를 따라 촬영해 주세요.</p>
+
+      <div class="guide">
+        <h4>권장 촬영 순서 (최소 4장, 권장 6~8장)</h4>
+        <ul>
+          <li>① 출입문 근처에서 방 전체가 보이게 1장</li>
+          <li>② 창문 방향에서 반대편 벽이 보이게 1장</li>
+          <li>③ 좌/우 코너(바닥-벽 경계) 각 1장</li>
+          <li>④ 천장 모서리 또는 문틀이 보이게 1장 (높이 추정 보조)</li>
+        </ul>
+      </div>
+
+      <div class="guide">
+        <h4>촬영 품질 체크</h4>
+        <ul>
+          <li>밝은 조명에서 촬영 (역광 피하기)</li>
+          <li>손떨림 없이 정지 후 촬영</li>
+          <li>가구가 너무 가까이 붙지 않게 한 걸음 뒤에서 촬영</li>
+          <li>같은 위치에서 연속 촬영하지 말고 각도 변경</li>
+        </ul>
+      </div>
+
+      <div class="field"><label>기준 물체</label><select id="ref"><option value="a4_long">A4 긴 변 (권장)</option><option value="credit_card">신용카드</option><option value="door_single">싱글 도어</option><option value="desk_standard">120cm 책상</option><option value="single_bed">싱글 침대</option></select></div>
+      <p class="note">기준 물체가 프레임에 1~2회 이상 보이게 찍으면 정확도가 올라갑니다.</p>
+
+      <div class="field"><label>방 사진</label><input id="photos" type="file" multiple accept="image/*" onchange="updatePhotoGuide()"/></div>
+      <p id="photoCountHint" class="note">현재 0장 선택됨 · 최소 2장, 권장 6장 이상</p>
       <p id="step3Error" class="error"></p>
     </section>
 
@@ -72,6 +128,10 @@
         <div class="box"><div class="label">스타일 점수</div><div id="kpiStyle" class="value">-</div></div>
       </div>
       <h3>추천 품목</h3><div id="items" class="items"></div>
+      <h3>카테고리별 대안</h3><div id="alts" class="items"></div>
+      <h3>저장/공유용 요약</h3>
+      <div class="field"><textarea id="shareSummary" rows="6" readonly></textarea></div>
+      <div class="grid2"><button class="ghost" onclick="copySummary()">요약 복사</button><button onclick="shareSummaryText()">공유</button></div>
       <h3>최근 히스토리</h3><div id="history" class="items"></div>
     </section>
 
@@ -115,10 +175,55 @@ async function login(){
   token=d.token; localStorage.setItem('roomfit_token',token); setAuthState('로그인됨: '+d.user.email);
 }
 
+async function ensureSession(){
+  if(token) return true;
+  const r = await fetch('/v1/dev/session',{method:'POST'});
+  if(!r.ok) return false;
+  const d = await safeJson(r);
+  if(!d.token) return false;
+  token = d.token;
+  localStorage.setItem('roomfit_token', token);
+  setAuthState(`개발자 모드 자동 로그인: ${d.user?.email || 'dev'}`);
+  return true;
+}
+
+function setActive(groupIds, activeId){
+  groupIds.forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('on'); });
+  const active = document.getElementById(activeId);
+  if(active) active.classList.add('on');
+}
+
+function pickMood(value, chipId){
+  mood.value = value;
+  setActive(['moodChipWarm','moodChipWhite','moodChipScandi'], chipId);
+}
+
+function pickPurpose(value, chipId){
+  purpose.value = value;
+  setActive(['purposeChipWorkSleep','purposeChipFocus','purposeChipStorage'], chipId);
+}
+
+function pickBudget(value){
+  budget.value = value;
+}
+
+function updatePhotoGuide(){
+  const count = photos.files?.length || 0;
+  if(count < 2) photoCountHint.textContent = `현재 ${count}장 선택됨 · 최소 2장 필요`;
+  else if(count < 4) photoCountHint.textContent = `현재 ${count}장 선택됨 · 가능하지만 4장 이상 권장`;
+  else if(count < 6) photoCountHint.textContent = `현재 ${count}장 선택됨 · 좋습니다. 6~8장이 가장 안정적`;
+  else if(count <= 12) photoCountHint.textContent = `현재 ${count}장 선택됨 · 매우 좋음 (권장 범위)`;
+  else photoCountHint.textContent = `현재 ${count}장 선택됨 · 최대 12장까지 업로드 가능`;
+}
+
 function toggleManual(){ manualDims.hidden = !manualToggle.checked; }
 
 async function nextStep(){
-  if(step===1){ if(!token) return setAuthState('먼저 로그인해줘요'); step=2; return renderStep(); }
+  if(step===1){
+    const ok = await ensureSession();
+    if(!ok) return setAuthState('먼저 로그인해줘요');
+    step=2; return renderStep();
+  }
   if(step===2){
     step2Error.textContent='';
     if(Number(budget.value)<100000) return step2Error.textContent='예산은 100,000원 이상 입력';
@@ -141,7 +246,12 @@ async function nextStep(){
     const d = await safeJson(r); if(!r.ok) return step3Error.textContent=(d.detail||'AI 추정 실패');
     roomId = d.room_profile.room_id; aiEstimate = d.room_profile;
     rvWidth.value = aiEstimate.width_cm; rvLength.value = aiEstimate.length_cm; rvHeight.value = aiEstimate.height_cm;
-    aiSummary.textContent = `신뢰도 ${Math.round((aiEstimate.estimate_confidence||0)*100)}% · 소스 ${aiEstimate.estimate_source}`;
+    const confPct = Math.round((aiEstimate.estimate_confidence||0)*100);
+    aiSummary.textContent = `신뢰도 ${confPct}% · 소스 ${aiEstimate.estimate_source}`;
+    if(aiEstimate.needs_manual_review){
+      aiSummary.textContent += ' · 신뢰도 낮음: 수정/재촬영 권장';
+      step4Error.textContent = (aiEstimate.recapture_guidance||[]).join(' / ');
+    }
     step=4; return renderStep();
   }
   if(step===4){
@@ -158,12 +268,16 @@ async function nextStep(){
 function prevStep(){ if(step>1){step--;renderStep();} }
 
 async function runRecommendation(){
-  const r = await fetch('/v1/recommendations',{method:'POST',headers:headers(),body:JSON.stringify({room_id:roomId,required_categories:['bed','desk','chair','storage']})});
+  const idem = `wiz-${roomId||'none'}-${mood.value}-${purpose.value}`;
+  const h = headers(); h['Idempotency-Key']=idem;
+  const r = await fetch('/v1/recommendations',{method:'POST',headers:h,body:JSON.stringify({room_id:roomId,required_categories:['bed','desk','chair','storage']})});
   const d = await safeJson(r); if(!r.ok) return;
   kpiPrice.textContent = d.summary?.total_price_krw ? `${fmt(d.summary.total_price_krw)}원` : '-';
   kpiFit.textContent = d.summary?.fit_score ?? '-';
   kpiStyle.textContent = d.summary?.style_score ?? '-';
-  items.innerHTML = (d.items||[]).map(i=>`<article class="item"><span class="badge">${i.category}</span><h3>${i.name}</h3><p>${fmt(i.price_krw)}원</p><p>${i.reason}</p></article>`).join('') || '<p class="meta">결과 없음</p>';
+  items.innerHTML = (d.items||[]).map(i=>`<article class="item"><span class="badge">${i.category}</span><h3>${i.name}</h3><p><b>${fmt(i.price_krw)}원</b></p><p>${i.reason}</p><p><a href="${i.url}" target="_blank">상품 링크</a></p></article>`).join('') || '<p class="meta">결과 없음</p>';
+  alts.innerHTML = Object.entries(d.alternatives||{}).map(([cat,list])=>`<article class="item"><span class="badge">${cat}</span>${(list||[]).map(a=>`<p>${a.name} · ${fmt(a.price_krw)}원</p>`).join('')}</article>`).join('') || '<p class="meta">대안 없음</p>';
+  shareSummary.value = buildShareSummary(d);
   await refreshHistory();
 }
 
@@ -172,7 +286,36 @@ async function refreshHistory(){
   history.innerHTML = (d.items||[]).map(h=>`<article class="item"><span class="badge">run</span><h3>${h.run_id}</h3><p>${fmt(h.total_price_krw)}원 · fit ${h.fit_score}</p><p>${h.created_at}</p></article>`).join('') || '<p class="meta">히스토리 없음</p>';
 }
 
+function buildShareSummary(d){
+  const lines = [
+    `[Roomfit 추천 요약]`,
+    `총액: ${fmt(d.summary?.total_price_krw||0)}원 / 예산 ${fmt(d.summary?.budget_krw||0)}원`,
+    `예산 잔액: ${fmt(d.summary?.remaining_budget_krw||0)}원 (${d.summary?.budget_usage_pct||0}% 사용)`,
+    `공간 적합도 ${d.summary?.fit_score ?? '-'} · 스타일 ${d.summary?.style_score ?? '-'}`,
+    ``,
+    ...(d.items||[]).map(i=>`- ${i.category}: ${i.name} (${fmt(i.price_krw)}원)`),
+  ];
+  return lines.join('\n');
+}
+
+async function copySummary(){
+  if(!shareSummary.value) return;
+  await navigator.clipboard.writeText(shareSummary.value);
+}
+
+async function shareSummaryText(){
+  if(!shareSummary.value) return;
+  if(navigator.share){
+    await navigator.share({title:'Roomfit 추천', text: shareSummary.value});
+  } else {
+    await copySummary();
+  }
+}
+
 if(token) setAuthState('기존 세션 토큰 감지됨');
+else ensureSession();
+pickMood('minimal_warm', 'moodChipWarm');
+pickPurpose('work_sleep', 'purposeChipWorkSleep');
 renderStep();
 </script>
 </body>

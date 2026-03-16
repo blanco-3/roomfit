@@ -7,8 +7,11 @@
 - 사용자별 room profile 저장
 - 다중 사진 업로드 (`/v1/room/photos`, 2~12장)
 - **AI 실측 추정 API** (`POST /v1/room/auto-estimate`): 업로드 사진 + 기준 물체 선택으로 방 치수/신뢰도 추정
+  - 저신뢰도(`needs_manual_review`) 시 재촬영 가이드 반환
 - 촬영 기준 가이드 API (`/v1/scan-guidelines`)
 - 추천 엔진 + 결과 저장 (수동 치수/AI 치수 모두 지원, 하위호환)
+  - 예산 사용률/잔액, 카테고리별 대안 추천, 공유용 요약 데이터 제공
+  - `Idempotency-Key` 지원으로 중복 추천 요청 재사용
 - 648 SKU 카탈로그
 - **모바일 퍼스트 5단계 위저드 UI + PWA**
   - 1) 계정, 2) 방 기본, 3) 사진+기준물체, 4) AI 추정 리뷰/수정, 5) 추천 결과+근거/히스토리
@@ -16,6 +19,7 @@
 - **운영 로그 테이블 + API** (`/v1/ops/logs`) 및 간단 대시보드 (`/ops`)
 - **추천 실행 히스토리 API** (`/v1/recommendations/history`) + 메인 UI 히스토리 패널
 - **CV 작업 스캐폴드 + 모의 실측 추정** (`POST /v1/cv/jobs`, `GET /v1/cv/jobs/{job_id}`)
+  - timeout/retry 상태 필드 + `Idempotency-Key` 재시도 안전성 스캐폴드
 
 ## 실행
 ```bash

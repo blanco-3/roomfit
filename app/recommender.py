@@ -27,6 +27,7 @@ def walkway_fit(room: dict, items: List[dict], min_walkway_cm: int = 60) -> bool
 
 def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -> dict:
     selected = []
+    alternatives: dict[str, list[dict]] = {}
     total_price = 0
 
     for cat in required_categories:
@@ -59,6 +60,16 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
             "score": best_score,
             "reason": "예산/치수/무드 적합",
         })
+        alternatives[cat] = [
+            {
+                "id": alt_item["id"],
+                "name": alt_item["name"],
+                "price_krw": alt_item["price_krw"],
+                "score": alt_score,
+                "url": alt_item["url"],
+            }
+            for alt_score, alt_item in scored[1:3]
+        ]
         total_price += int(best_item["price_krw"])
 
     fits = walkway_fit(
@@ -73,6 +84,7 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
 
     fit_score = round(min(1.0, 1 - (total_price / max(room["budget_krw"], 1) * 0.2)), 3)
     style_avg = round(sum(i["score"] for i in selected) / max(1, len(selected)), 3)
+    budget = int(room["budget_krw"])
 
     return {
         "summary": {
@@ -80,6 +92,10 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
             "fit_score": fit_score,
             "style_score": style_avg,
             "selected_count": len(selected),
+            "budget_krw": budget,
+            "remaining_budget_krw": max(0, budget - total_price),
+            "budget_usage_pct": round((total_price / max(budget, 1)) * 100, 1),
         },
         "items": selected,
+        "alternatives": alternatives,
     }
