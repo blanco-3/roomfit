@@ -36,8 +36,11 @@ MOOD INFERENCE from keywords:
 
 EXTRACTION — emit as soon as budget_krw is a specific number:
 <extracted>
-{"mood": "...", "purpose": "...", "budget_krw": 0, "categories": ["bed","desk","chair","storage","sofa","table"], "width_cm": null, "length_cm": null, "height_cm": null}
+{"mood": "...", "purpose": "...", "budget_krw": 0, "categories": ["bed","desk","chair","storage","sofa","table"], "width_cm": null, "length_cm": null, "height_cm": null, "pref_colors": [], "pref_materials": []}
 </extracted>
+
+Fill pref_colors if user mentions colors (e.g. "흰색" → ["white"], "원목" → ["natural", "brown"]).
+Fill pref_materials if user mentions materials (e.g. "원목" → ["solid_wood"], "패브릭" → ["fabric"]).
 
 After emitting <extracted>, add ONE short sentence asking if they want a different style or specific furniture only.
 

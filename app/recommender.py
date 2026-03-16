@@ -3,14 +3,25 @@ from __future__ import annotations
 from typing import List
 
 
-def style_score(item_tags: List[str], mood: str, purpose: str) -> float:
-    score = 0.0
+def style_score(item: dict, mood: str, purpose: str, pref_colors: List[str] = [], pref_materials: List[str] = []) -> float:
     mood_tokens = set(mood.lower().replace("-", "_").split("_"))
     purpose_tokens = set(purpose.lower().replace("-", "_").split("_"))
-    tags = set(t.lower() for t in item_tags)
+    tags = set(t.lower() for t in item.get("style_tags", []))
 
-    score += 0.6 * (len(tags.intersection(mood_tokens)) / max(1, len(mood_tokens)))
-    score += 0.4 * (len(tags.intersection(purpose_tokens)) / max(1, len(purpose_tokens)))
+    score = 0.0
+    score += 0.5 * (len(tags & mood_tokens) / max(1, len(mood_tokens)))
+    score += 0.3 * (len(tags & purpose_tokens) / max(1, len(purpose_tokens)))
+
+    # 색상/소재 선호도 보너스 (enriched 데이터 있을 때)
+    if pref_colors:
+        item_colors = set(c.lower() for c in item.get("colors", []))
+        if item_colors & set(c.lower() for c in pref_colors):
+            score += 0.15
+    if pref_materials:
+        item_mats = set(m.lower() for m in item.get("materials", []))
+        if item_mats & set(m.lower() for m in pref_materials):
+            score += 0.15
+
     return round(min(1.0, score), 3)
 
 
@@ -28,7 +39,8 @@ def walkway_fit(room: dict, items: List[dict], min_walkway_cm: int = 60) -> bool
 ITEMS_PER_CATEGORY = 3  # 카테고리당 추천 항목 수
 
 
-def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -> dict:
+def recommend(room: dict, required_categories: List[str], catalog: List[dict],
+              pref_colors: List[str] = [], pref_materials: List[str] = []) -> dict:
     selected = []
     total_price = 0
     mood_tokens = set(room["mood"].lower().replace("-", "_").split("_"))
@@ -41,7 +53,7 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
 
         scored = []
         for item in candidates:
-            s_score = style_score(item.get("style_tags", []), room["mood"], room["purpose"])
+            s_score = style_score(item, room["mood"], room["purpose"], pref_colors, pref_materials)
             size_penalty = footprint_cm2(item) / max(1, room["width_cm"] * room["length_cm"])
             final_score = (0.75 * s_score) + (0.25 * (1 - min(size_penalty, 1)))
             scored.append((round(final_score, 3), item))
