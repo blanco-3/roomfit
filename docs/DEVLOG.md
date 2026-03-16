@@ -66,3 +66,22 @@
 - Next:
   - Add richer UX affordances (form validation hints, endpoint-driven status chips).
   - Prepare worker queue abstraction (in-process now, Redis-ready interface next).
+
+## 2026-03-16 09:44 KST
+- Priority 1 (AI-assisted room sizing) implemented:
+  - Added mocked local CV inference utility `infer_room_dimensions_from_photos()` in `app/cv_worker.py`.
+  - Added new API: `POST /v1/room/auto-estimate` (multipart; photos + `reference_object`) to infer rough dimensions and confidence.
+  - Enhanced `room_profiles` model with estimation metadata (`estimate_source`, `estimate_confidence`, `estimation_notes`, `updated_at`) + SQLite in-place migration logic.
+  - Updated `/v1/room/estimate` to support editable fallback/update using optional `room_id` while keeping existing manual payload compatibility.
+  - Recommendation response now includes `room_estimation` metadata to show whether results came from manual vs AI-reviewed dimensions.
+- Priority 2 (major UI/UX redesign) implemented:
+  - Rebuilt `app/static/index.html` into 5-step mobile-first wizard:
+    1) account/login
+    2) room basics (+ optional manual dimensions)
+    3) photo upload and reference object selection
+    4) AI estimation review/edit
+    5) recommendation results + rationale/history
+  - Rewrote `app/static/styles.css` with card hierarchy, spacing, inline validation messages, and sticky primary CTA.
+  - Preserved PWA behavior (`manifest` + service worker registration retained).
+- Tests:
+  - Added `test_auto_estimate_from_photos_and_recommendation_flow` for new critical path.

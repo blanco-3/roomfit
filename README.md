@@ -6,10 +6,12 @@
 - 이메일/비밀번호 로그인 (`/v1/auth/register`, `/v1/auth/login`)
 - 사용자별 room profile 저장
 - 다중 사진 업로드 (`/v1/room/photos`, 2~12장)
+- **AI 실측 추정 API** (`POST /v1/room/auto-estimate`): 업로드 사진 + 기준 물체 선택으로 방 치수/신뢰도 추정
 - 촬영 기준 가이드 API (`/v1/scan-guidelines`)
-- 추천 엔진 + 결과 저장
+- 추천 엔진 + 결과 저장 (수동 치수/AI 치수 모두 지원, 하위호환)
 - 648 SKU 카탈로그
-- 오늘의집 스타일 UI + PWA(모바일 앱처럼 설치 가능)
+- **모바일 퍼스트 5단계 위저드 UI + PWA**
+  - 1) 계정, 2) 방 기본, 3) 사진+기준물체, 4) AI 추정 리뷰/수정, 5) 추천 결과+근거/히스토리
 - **DB 백엔드 추상화 스캐폴드** (`DATABASE_URL` 기반, SQLite 기본 / Postgres 전환 경로 준비)
 - **운영 로그 테이블 + API** (`/v1/ops/logs`) 및 간단 대시보드 (`/ops`)
 - **추천 실행 히스토리 API** (`/v1/recommendations/history`) + 메인 UI 히스토리 패널
