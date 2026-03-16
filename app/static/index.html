@@ -173,7 +173,17 @@
     .input-area {
       background: var(--surface); border-top: 1px solid var(--border);
       padding: 12px 16px 20px; flex-shrink: 0;
+      transition: background 0.15s;
     }
+    .input-area.drag-over {
+      background: #e8f7fd;
+      border-top-color: var(--primary);
+    }
+    .drag-hint {
+      display: none; text-align: center; font-size: 13px;
+      color: var(--primary); font-weight: 600; padding: 6px 0 2px;
+    }
+    .input-area.drag-over .drag-hint { display: block; }
     #photoPreview { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
     .preview-thumb {
       position: relative; width: 60px; height: 60px;
@@ -251,7 +261,8 @@
 
   <div class="messages-area" id="messages"></div>
 
-  <div class="input-area">
+  <div class="input-area" id="inputArea">
+    <div class="drag-hint">📷 여기에 놓으면 첨부돼요</div>
     <div id="photoPreview"></div>
     <div class="input-row">
       <button class="btn-photo" onclick="document.getElementById('photoInput').click()" title="사진 첨부">📷</button>
@@ -449,14 +460,49 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
+// ── Drag & Drop ──
+(function initDragDrop() {
+  const area = document.getElementById('inputArea');
+  let dragCounter = 0;
+
+  area.addEventListener('dragenter', e => {
+    e.preventDefault();
+    dragCounter++;
+    area.classList.add('drag-over');
+  });
+  area.addEventListener('dragleave', () => {
+    dragCounter--;
+    if (dragCounter === 0) area.classList.remove('drag-over');
+  });
+  area.addEventListener('dragover', e => e.preventDefault());
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    area.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length) addPendingFiles(files);
+  });
+
+  // 채팅 화면 전체에서도 드래그 받기
+  document.getElementById('chatScreen').addEventListener('dragover', e => e.preventDefault());
+  document.getElementById('chatScreen').addEventListener('drop', e => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length) addPendingFiles(files);
+  });
+})();
+
 // ── Photos ──
-function handlePhotos(e) {
-  const files = Array.from(e.target.files);
+function addPendingFiles(files) {
   files.forEach(f => {
     const url = URL.createObjectURL(f);
     pendingPhotos.push({ file: f, objectUrl: url });
   });
   renderPhotoPreview();
+}
+
+function handlePhotos(e) {
+  addPendingFiles(Array.from(e.target.files));
   e.target.value = '';
 }
 
