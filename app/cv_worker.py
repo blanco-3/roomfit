@@ -30,9 +30,16 @@ def infer_room_dimensions_from_photos(
     reference_object: str,
     photo_paths: Optional[list[str]] = None,
 ) -> dict:
-    """방 사진에서 치수 추정. Gemini → OpenAI → mock 순으로 fallback."""
+    """방 사진에서 치수 추정. Groq → Gemini → OpenAI → mock 순으로 fallback."""
+    groq_key = os.getenv("GROQ_API_KEY")
     google_key = os.getenv("GOOGLE_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
+
+    if groq_key and photo_paths:
+        try:
+            return _groq_infer(photo_paths, reference_object, groq_key)
+        except Exception:
+            pass
 
     if google_key and photo_paths:
         try:
@@ -47,6 +54,42 @@ def infer_room_dimensions_from_photos(
             pass
 
     return _mock_infer(photo_count, reference_object)
+
+
+def _groq_infer(photo_paths: list[str], reference_object: str, api_key: str) -> dict:
+    from groq import Groq
+
+    client = Groq(api_key=api_key)
+    model = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+    ref_cm = REFERENCE_WIDTHS_CM.get(reference_object, 21.0)
+    prompt = f"기준 물체: {reference_object} ({ref_cm}cm). " + _CV_PROMPT
+
+    content: list = [{"type": "text", "text": prompt}]
+    loaded = 0
+    for path in photo_paths[:4]:
+        try:
+            img_bytes = Path(path).read_bytes()
+            if len(img_bytes) < 100:
+                continue
+            b64 = base64.b64encode(img_bytes).decode()
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+            loaded += 1
+        except Exception:
+            continue
+
+    if loaded == 0:
+        return _mock_infer(len(photo_paths), reference_object)
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": content}],
+        max_tokens=512,
+    )
+    import re
+    raw_text = resp.choices[0].message.content or "{}"
+    m = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    raw = json.loads(m.group(0) if m else "{}")
+    return _parse_cv_result(raw, reference_object, len(photo_paths), f"groq-{model}")
 
 
 def _gemini_infer(photo_paths: list[str], reference_object: str, api_key: str) -> dict:

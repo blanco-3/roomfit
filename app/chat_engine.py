@@ -64,7 +64,7 @@ class ChatEngine:
         image_b64_list: Optional[list[str]] = None,
     ) -> dict:
         if self._groq_key:
-            return self._groq_chat(history, user_message)
+            return self._groq_chat(history, user_message, image_b64_list)
         if self._google_key:
             return self._gemini_chat(history, user_message, image_b64_list)
         if self._openai_key:
@@ -75,15 +75,30 @@ class ChatEngine:
     # Groq
     # ------------------------------------------------------------------
 
-    def _groq_chat(self, history: list[dict], user_message: str) -> dict:
+    def _groq_chat(
+        self,
+        history: list[dict],
+        user_message: str,
+        image_b64_list: Optional[list[str]] = None,
+    ) -> dict:
         from groq import Groq
 
         client = Groq(api_key=self._groq_key)
-        model = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
+
+        # 이미지가 있으면 vision 모델 사용
+        if image_b64_list:
+            model = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+            content: list = [{"type": "text", "text": user_message}]
+            for b64 in image_b64_list:
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+            user_part: object = content
+        else:
+            model = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
+            user_part = user_message
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(history)
-        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "user", "content": user_part})
 
         try:
             response = client.chat.completions.create(
