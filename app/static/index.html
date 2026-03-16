@@ -327,6 +327,7 @@
       display: flex; gap: 10px;
       overflow-x: auto; padding-bottom: 8px;
       scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+      perspective: 800px;
     }
     .rec-rail::-webkit-scrollbar { height: 4px; }
     .rec-rail::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
@@ -339,8 +340,8 @@
       border-radius: 14px; overflow: hidden;
       position: relative;
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      transition: transform 0.25s cubic-bezier(.22,1,.36,1),
-                  border-color 0.25s, box-shadow 0.25s;
+      will-change: transform;
+      transition: transform 0.6s ease, border-color 0.25s, box-shadow 0.25s;
       /* entrance animation — common */
       animation: card-pop 0.4s cubic-bezier(.22,1,.36,1) both;
     }
@@ -354,12 +355,51 @@
     }
 
     .rec-pcard:hover {
-      transform: translateY(-5px) scale(1.02);
-      border-color: rgba(56,189,248,.30);
-      box-shadow: 0 16px 36px rgba(0,0,0,.55), 0 0 16px rgba(56,189,248,.12);
+      border-color: rgba(56,189,248,.35);
+      box-shadow: 0 20px 48px rgba(0,0,0,.65), 0 0 22px rgba(56,189,248,.18),
+                  0 0 0 1px rgba(56,189,248,.06) inset;
     }
     .rec-pcard.alt { opacity: 0.70; }
     .rec-pcard.alt:hover { opacity: 1; }
+
+    /* ── 3D Tilt: mouse-position light reflection ── */
+    .rec-pcard::after {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(
+        circle at var(--light-x, 50%) var(--light-y, 50%),
+        rgba(255,255,255,.18) 0%, rgba(255,255,255,.06) 30%, transparent 65%
+      );
+      opacity: 0; pointer-events: none; z-index: 3;
+      transition: opacity 0.2s;
+    }
+    .rec-pcard.tilt-active::after { opacity: 1; }
+
+    /* ── Image shine sweep on hover (CSS only, left → right) ── */
+    .rec-pcard-img-wrap::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.26) 50%, transparent 65%);
+      transform: translateX(-100%); transition: none;
+    }
+    .rec-pcard:hover .rec-pcard-img-wrap::after {
+      transform: translateX(200%);
+      transition: transform 0.55s ease;
+    }
+
+    /* ── Placeholder icon: float feel on hover ── */
+    .rec-pcard:hover .rec-pcard-img-ph {
+      text-shadow: 0 0 18px rgba(56,189,248,.55), 0 6px 14px rgba(0,0,0,.45);
+      transform: scale(1.1);
+    }
+
+    /* ── Mobile: no tilt — tap scale instead ── */
+    @media (pointer: coarse) {
+      .rec-pcard { transition: transform 0.12s ease, border-color 0.2s, box-shadow 0.2s; }
+      .rec-pcard:active {
+        transform: scale(0.96);
+        border-color: rgba(56,189,248,.35);
+        box-shadow: 0 0 16px rgba(56,189,248,.2);
+      }
+    }
 
     .rec-pcard-img-wrap {
       width: 100%; height: 120px; overflow: hidden;
@@ -373,6 +413,7 @@
     .rec-pcard-img-ph {
       width: 100%; height: 100%;
       display: flex; align-items: center; justify-content: center; font-size: 32px;
+      transition: transform 0.3s ease, text-shadow 0.3s;
     }
 
     .rec-pcard-body { padding: 10px 10px 8px; }
@@ -952,6 +993,82 @@ function mdToHtml(text) {
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/^• (.+)$/gm, '<span style="display:block;padding-left:12px">• $1</span>');
 }
+
+// ══════════════════════════════════════════════════
+// 3D CARD TILT — desktop only, rAF + IntersectionObserver
+// ══════════════════════════════════════════════════
+(function initCardTilt() {
+  // Skip entirely on touch devices
+  if (window.matchMedia('(pointer: coarse)').matches) return;
+
+  const TILT_MAX = 12; // ±degrees
+
+  // Bind / unbind when cards enter / leave viewport
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => e.isIntersecting ? bindCard(e.target) : unbindCard(e.target));
+  }, { threshold: 0.1 });
+
+  // Watch for new .rec-pcard nodes added by renderRec()
+  new MutationObserver(() => {
+    document.querySelectorAll('.rec-pcard:not([data-tilt])').forEach(card => {
+      card.dataset.tilt = '1';
+      io.observe(card);
+    });
+  }).observe(document.getElementById('messages'), { childList: true, subtree: true });
+
+  function bindCard(card) {
+    if (card._tilt) return; // already bound
+    let rafId = null, tx = 0, ty = 0;
+
+    const move = e => {
+      const r = card.getBoundingClientRect();
+      const nx = (e.clientX - r.left) / r.width  * 2 - 1; // -1 … +1
+      const ny = (e.clientY - r.top)  / r.height * 2 - 1;
+      tx = -ny * TILT_MAX;
+      ty =  nx * TILT_MAX;
+      // CSS custom props drive the ::after radial-gradient highlight
+      card.style.setProperty('--light-x', ((nx + 1) / 2 * 100).toFixed(1) + '%');
+      card.style.setProperty('--light-y', ((ny + 1) / 2 * 100).toFixed(1) + '%');
+      if (!rafId) rafId = requestAnimationFrame(applyTilt);
+    };
+
+    const applyTilt = () => {
+      rafId = null;
+      card.style.transform =
+        `rotateX(${tx.toFixed(2)}deg) rotateY(${ty.toFixed(2)}deg) translateZ(20px)`;
+    };
+
+    const enter = () => {
+      // Fast response while tracking mouse
+      card.style.transition = 'transform 0.08s ease, box-shadow 0.25s, border-color 0.25s';
+      card.classList.add('tilt-active');
+    };
+
+    const leave = () => {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      // Slow, smooth return to flat
+      card.style.transition = 'transform 0.6s ease, box-shadow 0.35s, border-color 0.25s';
+      card.style.transform = '';
+      card.style.removeProperty('--light-x');
+      card.style.removeProperty('--light-y');
+      card.classList.remove('tilt-active');
+    };
+
+    card._tilt = { move, enter, leave };
+    card.addEventListener('mousemove', move);
+    card.addEventListener('mouseenter', enter);
+    card.addEventListener('mouseleave', leave);
+  }
+
+  function unbindCard(card) {
+    const h = card._tilt;
+    if (!h) return;
+    card.removeEventListener('mousemove', h.move);
+    card.removeEventListener('mouseenter', h.enter);
+    card.removeEventListener('mouseleave', h.leave);
+    delete card._tilt;
+  }
+})();
 
 // ══════════════════════════════════════════════════
 // THREE.JS 3D AUTH BACKGROUND
