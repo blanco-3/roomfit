@@ -25,10 +25,14 @@ def walkway_fit(room: dict, items: List[dict], min_walkway_cm: int = 60) -> bool
     return occupancy_ratio <= 0.55 and min(room["width_cm"], room["length_cm"]) >= (min_walkway_cm * 3)
 
 
+ITEMS_PER_CATEGORY = 3  # 카테고리당 추천 항목 수
+
+
 def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -> dict:
     selected = []
-    alternatives: dict[str, list[dict]] = {}
     total_price = 0
+    mood_tokens = set(room["mood"].lower().replace("-", "_").split("_"))
+    purpose_tokens = set(room["purpose"].lower().replace("-", "_").split("_"))
 
     for cat in required_categories:
         candidates = [i for i in catalog if i["category"] == cat and i["price_krw"] <= room["budget_krw"]]
@@ -43,55 +47,47 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
             scored.append((round(final_score, 3), item))
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        best_score, best_item = scored[0]
 
-        # reason: 실제 매칭된 스타일 태그 기반
-        matched = set(t.lower() for t in best_item.get("style_tags", [])) & (
-            set(room["mood"].lower().replace("-", "_").split("_")) |
-            set(room["purpose"].lower().replace("-", "_").split("_"))
-        )
-        reason = f"스타일 매칭: {', '.join(sorted(matched))}" if matched else "예산/치수 적합"
+        for rank, (score, item) in enumerate(scored[:ITEMS_PER_CATEGORY]):
+            matched = set(t.lower() for t in item.get("style_tags", [])) & (mood_tokens | purpose_tokens)
+            reason = f"스타일 매칭: {', '.join(sorted(matched))}" if matched else "예산/치수 적합"
 
-        selected.append({
-            "id": best_item["id"],
-            "name": best_item["name"],
-            "category": best_item["category"],
-            "price_krw": best_item["price_krw"],
-            "dimensions_cm": {
-                "width": best_item["width_cm"],
-                "depth": best_item["depth_cm"],
-                "height": best_item["height_cm"],
-            },
-            "source": best_item["source"],
-            "url": best_item["url"],
-            "image_url": best_item.get("image_url", ""),
-            "score": best_score,
-            "reason": reason,
-        })
-        alternatives[cat] = [
-            {
-                "id": alt_item["id"],
-                "name": alt_item["name"],
-                "price_krw": alt_item["price_krw"],
-                "score": alt_score,
-                "url": alt_item["url"],
-            }
-            for alt_score, alt_item in scored[1:3]
-        ]
-        total_price += int(best_item["price_krw"])
+            selected.append({
+                "id": item["id"],
+                "name": item["name"],
+                "category": item["category"],
+                "price_krw": item["price_krw"],
+                "dimensions_cm": {
+                    "width": item["width_cm"],
+                    "depth": item["depth_cm"],
+                    "height": item["height_cm"],
+                },
+                "source": item["source"],
+                "url": item["url"],
+                "image_url": item.get("image_url", ""),
+                "score": score,
+                "rank": rank + 1,
+                "reason": reason,
+            })
+            if rank == 0:
+                total_price += int(item["price_krw"])  # 합계는 1위 항목 기준
 
+    # walkway check: rank=1 항목만 대상
+    top_items = [i for i in selected if i["rank"] == 1]
     fits = walkway_fit(
         room,
-        [{"width_cm": i["dimensions_cm"]["width"], "depth_cm": i["dimensions_cm"]["depth"]} for i in selected],
+        [{"width_cm": i["dimensions_cm"]["width"], "depth_cm": i["dimensions_cm"]["depth"]} for i in top_items],
     )
-
-    if not fits and selected:
-        selected = sorted(selected, key=lambda i: i["dimensions_cm"]["width"] * i["dimensions_cm"]["depth"])
-        selected = selected[:-1]
-        total_price = sum(i["price_krw"] for i in selected)
+    if not fits and top_items:
+        # 가장 큰 카테고리의 rank=1 제거
+        largest = max(top_items, key=lambda i: i["dimensions_cm"]["width"] * i["dimensions_cm"]["depth"])
+        drop_cat = largest["category"]
+        selected = [i for i in selected if i["category"] != drop_cat]
+        total_price = sum(i["price_krw"] for i in selected if i["rank"] == 1)
 
     fit_score = round(min(1.0, 1 - (total_price / max(room["budget_krw"], 1) * 0.2)), 3)
-    style_avg = round(sum(i["score"] for i in selected) / max(1, len(selected)), 3)
+    top_scores = [i["score"] for i in selected if i["rank"] == 1]
+    style_avg = round(sum(top_scores) / max(1, len(top_scores)), 3)
     budget = int(room["budget_krw"])
 
     return {
@@ -99,11 +95,10 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
             "total_price_krw": total_price,
             "fit_score": fit_score,
             "style_score": style_avg,
-            "selected_count": len(selected),
+            "selected_count": len([i for i in selected if i["rank"] == 1]),
             "budget_krw": budget,
             "remaining_budget_krw": max(0, budget - total_price),
             "budget_usage_pct": round((total_price / max(budget, 1)) * 100, 1),
         },
         "items": selected,
-        "alternatives": alternatives,
     }

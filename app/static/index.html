@@ -155,6 +155,12 @@
       padding: 3px 8px; border-radius: 6px; text-decoration: none; white-space: nowrap;
     }
     .rec-item a:hover { background: var(--primary-dark); }
+    .rec-group { margin-bottom: 14px; }
+    .rec-group:last-child { margin-bottom: 0; }
+    .rec-group-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .rec-item.alt { opacity: 0.82; }
+    .rec-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--primary); color: #fff; }
+    .rec-badge.alt { background: var(--border); color: var(--text-muted); }
 
     /* Loading bubble */
     .loading-dots { display: flex; gap: 5px; padding: 4px 0; }
@@ -460,34 +466,32 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
-// ── Drag & Drop ──
+// ── Drag & Drop (document-level, most robust) ──
 (function initDragDrop() {
-  const area = document.getElementById('inputArea');
   let dragCounter = 0;
+  const inputArea = () => document.getElementById('inputArea');
 
-  area.addEventListener('dragenter', e => {
+  document.addEventListener('dragenter', e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     dragCounter++;
-    area.classList.add('drag-over');
-  });
-  area.addEventListener('dragleave', () => {
-    dragCounter--;
-    if (dragCounter === 0) area.classList.remove('drag-over');
-  });
-  area.addEventListener('dragover', e => e.preventDefault());
-  area.addEventListener('drop', e => {
-    e.preventDefault();
-    dragCounter = 0;
-    area.classList.remove('drag-over');
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-    if (files.length) addPendingFiles(files);
+    inputArea()?.classList.add('drag-over');
   });
 
-  // 채팅 화면 전체에서도 드래그 받기
-  document.getElementById('chatScreen').addEventListener('dragover', e => e.preventDefault());
-  document.getElementById('chatScreen').addEventListener('drop', e => {
+  document.addEventListener('dragleave', e => {
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) inputArea()?.classList.remove('drag-over');
+  });
+
+  document.addEventListener('dragover', e => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault();
+  });
+
+  document.addEventListener('drop', e => {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    dragCounter = 0;
+    inputArea()?.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
     if (files.length) addPendingFiles(files);
   });
 })();
@@ -526,6 +530,8 @@ function removePhoto(idx) {
 const CAT_ICONS = { bed:'🛏', desk:'🪑', chair:'💺', storage:'🗄', sofa:'🛋', table:'🪵' };
 
 // ── Render recommendation ──
+const CAT_LABELS = { bed:'침대', desk:'책상', chair:'의자', storage:'수납', sofa:'소파', table:'테이블' };
+
 function renderRec(rec) {
   if (!rec || !rec.summary || !rec.items) return '';
   const { summary, items } = rec;
@@ -533,35 +539,47 @@ function renderRec(rec) {
   const usage = summary.budget_usage_pct;
   const remaining = summary.remaining_budget_krw?.toLocaleString('ko-KR');
 
-  const itemsHtml = items.map(item => {
-    const icon = CAT_ICONS[item.category] || '🪑';
-    const imgHtml = item.image_url
-      ? `<img class="rec-item-img" src="${escHtml(item.image_url)}" alt="${escHtml(item.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="rec-item-img-placeholder" style="display:none">${icon}</div>`
-      : `<div class="rec-item-img-placeholder">${icon}</div>`;
-    const catLabel = { bed:'침대', desk:'책상', chair:'의자', storage:'수납', sofa:'소파', table:'테이블' }[item.category] || item.category;
-    return `
-      <div class="rec-item">
-        ${imgHtml}
-        <div class="rec-item-info">
-          <div class="name">${escHtml(item.name)}</div>
-          <div class="cat">${catLabel}</div>
-        </div>
-        <div class="rec-item-right">
-          <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
-          ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">구매</a>` : ''}
-        </div>
-      </div>`;
+  // 카테고리별 그룹화
+  const groups = {};
+  items.forEach(item => {
+    if (!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+  });
+
+  const groupsHtml = Object.entries(groups).map(([cat, catItems]) => {
+    const icon = CAT_ICONS[cat] || '🪑';
+    const label = CAT_LABELS[cat] || cat;
+    const itemsHtml = catItems.map((item, idx) => {
+      const imgHtml = item.image_url
+        ? `<img class="rec-item-img" src="${escHtml(item.image_url)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="rec-item-img-placeholder" style="display:none">${icon}</div>`
+        : `<div class="rec-item-img-placeholder">${icon}</div>`;
+      const badge = idx === 0 ? '<span class="rec-badge">추천</span>' : `<span class="rec-badge alt">${idx+1}위</span>`;
+      return `
+        <div class="rec-item${idx > 0 ? ' alt' : ''}">
+          ${imgHtml}
+          <div class="rec-item-info">
+            <div class="name">${escHtml(item.name)}</div>
+            <div class="cat">${badge}</div>
+          </div>
+          <div class="rec-item-right">
+            <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
+            ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">구매</a>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    return `<div class="rec-group"><div class="rec-group-label">${icon} ${label}</div>${itemsHtml}</div>`;
   }).join('');
 
   return `
     <div class="rec-card">
       <h4>🛋 추천 가구 목록</h4>
       <div class="rec-summary">
-        <div class="rec-stat"><div class="val">${price}원</div><div class="lbl">총 금액</div></div>
+        <div class="rec-stat"><div class="val">${price}원</div><div class="lbl">총 금액(1위 기준)</div></div>
         <div class="rec-stat"><div class="val">${usage}%</div><div class="lbl">예산 사용</div></div>
         <div class="rec-stat"><div class="val">${remaining}원</div><div class="lbl">잔여 예산</div></div>
       </div>
-      <div class="rec-items">${itemsHtml}</div>
+      <div class="rec-items">${groupsHtml}</div>
     </div>`;
 }
 
