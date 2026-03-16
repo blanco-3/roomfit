@@ -171,6 +171,20 @@ def init_db() -> None:
         if 'timeout_seconds' not in cv_columns:
             c.execute("ALTER TABLE cv_jobs ADD COLUMN timeout_seconds INTEGER")
 
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+              session_id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              messages_json TEXT NOT NULL DEFAULT '[]',
+              room_id TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY(user_id) REFERENCES users(user_id)
+            )
+            """
+        )
+
 
 def log_event(event_type: str, message: str, *, level: str = "info", context: Optional[dict] = None) -> str:
     log_id = str(uuid.uuid4())
@@ -504,3 +518,45 @@ def list_recommendation_runs(user_id: str, limit: int = 20) -> list[dict]:
 def load_catalog() -> list[dict]:
     with open(CATALOG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+# ---------------------------------------------------------------------------
+# Chat sessions
+# ---------------------------------------------------------------------------
+
+def create_chat_session(user_id: str) -> str:
+    session_id = str(uuid.uuid4())
+    with conn() as c:
+        c.execute(
+            "INSERT INTO chat_sessions (session_id, user_id, messages_json) VALUES (?, ?, ?)",
+            (session_id, user_id, "[]"),
+        )
+    return session_id
+
+
+def get_chat_session(session_id: str) -> Optional[dict]:
+    with conn() as c:
+        row = c.execute("SELECT * FROM chat_sessions WHERE session_id = ?", (session_id,)).fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    try:
+        item["messages"] = json.loads(item.pop("messages_json"))
+    except Exception:
+        item["messages"] = []
+    return item
+
+
+def update_chat_session(session_id: str, messages: list, room_id: Optional[str] = None) -> None:
+    messages_json = json.dumps(messages, ensure_ascii=False)
+    with conn() as c:
+        if room_id is not None:
+            c.execute(
+                "UPDATE chat_sessions SET messages_json = ?, room_id = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
+                (messages_json, room_id, session_id),
+            )
+        else:
+            c.execute(
+                "UPDATE chat_sessions SET messages_json = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?",
+                (messages_json, session_id),
+            )

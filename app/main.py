@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
 import os
 from pathlib import Path
@@ -9,15 +10,18 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFil
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.chat_engine import ChatEngine
 from app.cv_worker import infer_room_dimensions_from_photos, mock_measurement_estimation
 from app.db import (
     authenticate_user,
     count_room_photos,
+    create_chat_session,
     create_cv_job,
     create_token,
     create_user,
     find_recommendation_by_key,
     find_reusable_cv_job,
+    get_chat_session,
     get_cv_job,
     get_room,
     get_user_by_token,
@@ -30,6 +34,7 @@ from app.db import (
     save_recommendation,
     save_room,
     save_room_photo,
+    update_chat_session,
     update_cv_job,
 )
 from app.recommender import recommend
@@ -418,3 +423,83 @@ def ops_logs(limit: int = Query(50, ge=1, le=200), authorization: Optional[str] 
     # lightweight protection: reuse standard auth for internal dashboard use
     _ = get_current_user(authorization)
     return {"count": limit, "items": list_ops_logs(limit=limit)}
+
+
+@app.post("/v1/chat")
+async def chat(
+    message: str = Form(...),
+    session_id: Optional[str] = Form(None),
+    files: Optional[list[UploadFile]] = File(None),
+    authorization: Optional[str] = Header(None),
+):
+    user = get_current_user(authorization)
+
+    # 세션 조회 또는 생성
+    if session_id:
+        session = get_chat_session(session_id)
+        if not session or session["user_id"] != user["user_id"]:
+            raise HTTPException(status_code=404, detail="session not found")
+    else:
+        session_id = create_chat_session(user["user_id"])
+        session = {"session_id": session_id, "user_id": user["user_id"], "messages": [], "room_id": None}
+
+    history: list[dict] = session["messages"]
+
+    # 이미지 처리 (base64 인코딩)
+    image_b64_list: Optional[list[str]] = None
+    if files:
+        image_b64_list = []
+        for f in files:
+            content = await f.read()
+            image_b64_list.append(base64.b64encode(content).decode())
+
+    # AI 응답 생성
+    engine = ChatEngine()
+    result = engine.chat(history, message, image_b64_list)
+
+    # 히스토리 업데이트 (user 메시지는 텍스트로만 저장)
+    history.append({"role": "user", "content": message})
+    history.append({"role": "assistant", "content": result["reply"]})
+
+    room_id: Optional[str] = session.get("room_id")
+    recommendation: Optional[dict] = None
+
+    # 추천 트리거: mood + purpose + budget_krw 추출 완료 시
+    if result["trigger_recommend"] and result["extracted"]:
+        extracted = result["extracted"]
+        room_data = {
+            "width_cm": extracted.get("width_cm", 280),
+            "length_cm": extracted.get("length_cm", 340),
+            "height_cm": extracted.get("height_cm", 240),
+            "mood": extracted.get("mood", "minimal_warm"),
+            "purpose": extracted.get("purpose", "work_sleep"),
+            "budget_krw": int(extracted.get("budget_krw", 1200000)),
+        }
+        if room_id:
+            room_data["room_id"] = room_id
+        saved_room = save_room(user["user_id"], room_data)
+        room_id = saved_room["room_id"]
+
+        full_room = get_room(room_id)
+        categories: list[str] = extracted.get("categories", ["bed", "desk", "chair", "storage"])
+        recommendation = recommend(full_room, categories, load_catalog())
+        save_recommendation(room_id, recommendation)
+        log_event(
+            "chat.recommend",
+            "chat-triggered recommendation",
+            context={"room_id": room_id, "user_id": user["user_id"]},
+        )
+
+    update_chat_session(session_id, history, room_id)
+    log_event(
+        "chat.message",
+        "chat message processed",
+        context={"session_id": session_id, "user_id": user["user_id"]},
+    )
+
+    return {
+        "session_id": session_id,
+        "reply": result["reply"],
+        "extracted": result["extracted"],
+        "recommendation": recommendation,
+    }

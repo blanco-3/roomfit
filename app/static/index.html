@@ -3,320 +3,528 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Roomfit Wizard</title>
+  <title>Roomfit — AI 인테리어 코파일럿</title>
   <meta name="theme-color" content="#35c5f0" />
   <link rel="manifest" href="/static/manifest.json" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f5f0;
+      --surface: #ffffff;
+      --primary: #35c5f0;
+      --primary-dark: #1da8d4;
+      --text: #1a1a1a;
+      --text-muted: #888;
+      --border: #e0e0e0;
+      --ai-bubble: #ffffff;
+      --user-bubble: #35c5f0;
+      --radius: 16px;
+      --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── Auth screen ── */
+    #authScreen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+    }
+    .auth-card {
+      background: var(--surface); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 40px 32px; width: 100%; max-width: 400px;
+    }
+    .auth-logo { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+    .auth-logo span { color: var(--primary); }
+    .auth-tagline { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+    .auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .auth-field label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .auth-field input {
+      padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px;
+      font-size: 15px; outline: none; transition: border 0.2s;
+    }
+    .auth-field input:focus { border-color: var(--primary); }
+    .auth-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+    .btn-primary {
+      padding: 12px; background: var(--primary); color: #fff; border: none;
+      border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-outline {
+      padding: 12px; background: transparent; color: var(--primary); border: 1.5px solid var(--primary);
+      border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-outline:hover { background: var(--primary); color: #fff; }
+    .btn-dev {
+      width: 100%; margin-top: 12px; padding: 10px; background: #f0f0f0; color: var(--text-muted);
+      border: none; border-radius: 10px; font-size: 13px; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-dev:hover { background: #e0e0e0; }
+    #authMsg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
+    #authMsg.error { color: #e53e3e; }
+    #authMsg.success { color: #38a169; }
+
+    /* ── Chat screen ── */
+    #chatScreen {
+      display: none; flex-direction: column; height: 100vh; max-width: 800px;
+      margin: 0 auto;
+    }
+    #chatScreen.active { display: flex; }
+
+    /* Header */
+    .chat-header {
+      display: flex; align-items: center; padding: 14px 18px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05); flex-shrink: 0; gap: 12px;
+    }
+    .chat-logo { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; flex: 1; }
+    .chat-logo span { color: var(--primary); }
+    .chat-user { font-size: 13px; color: var(--text-muted); }
+    .btn-logout {
+      padding: 6px 12px; background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 8px; font-size: 12px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-logout:hover { background: #fee; color: #e53e3e; border-color: #e53e3e; }
+
+    /* Messages */
+    .messages-area {
+      flex: 1; overflow-y: auto; padding: 20px 16px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .msg { display: flex; gap: 10px; align-items: flex-end; }
+    .msg.user { flex-direction: row-reverse; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+    }
+    .msg.ai .avatar { background: var(--primary); color: #fff; }
+    .msg.user .avatar { background: #e8e8e8; color: var(--text); }
+    .bubble {
+      max-width: 72%; padding: 12px 16px; border-radius: 18px;
+      font-size: 15px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+    }
+    .msg.ai .bubble {
+      background: var(--ai-bubble); border: 1px solid var(--border);
+      border-bottom-left-radius: 4px; box-shadow: var(--shadow);
+    }
+    .msg.user .bubble {
+      background: var(--user-bubble); color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    /* Photo previews inside message */
+    .bubble-photos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .bubble-photos img {
+      width: 80px; height: 80px; object-fit: cover; border-radius: 8px;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+
+    /* Recommendation card */
+    .rec-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 16px; margin-top: 10px; box-shadow: var(--shadow);
+    }
+    .rec-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text); }
+    .rec-summary {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
+    }
+    .rec-stat { background: var(--bg); border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .rec-stat .val { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .rec-stat .lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .rec-items { display: flex; flex-direction: column; gap: 8px; }
+    .rec-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px; background: var(--bg); border-radius: 10px; gap: 8px;
+    }
+    .rec-item .name { font-size: 14px; font-weight: 600; flex: 1; }
+    .rec-item .cat { font-size: 11px; color: var(--text-muted); }
+    .rec-item .price { font-size: 14px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+    .rec-item a { font-size: 12px; color: var(--primary); text-decoration: none; }
+    .rec-item a:hover { text-decoration: underline; }
+
+    /* Loading bubble */
+    .loading-dots { display: flex; gap: 5px; padding: 4px 0; }
+    .loading-dots span {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted);
+      animation: bounce 1.2s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    /* Input area */
+    .input-area {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 12px 16px 20px; flex-shrink: 0;
+    }
+    #photoPreview { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .preview-thumb {
+      position: relative; width: 60px; height: 60px;
+    }
+    .preview-thumb img {
+      width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 2px solid var(--border);
+    }
+    .preview-thumb .remove-btn {
+      position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+      background: #e53e3e; color: #fff; border: none; border-radius: 50%;
+      font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .input-row { display: flex; gap: 8px; align-items: flex-end; }
+    .btn-photo {
+      width: 44px; height: 44px; background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 12px; font-size: 20px; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .btn-photo:hover { background: var(--primary); border-color: var(--primary); }
+    #msgInput {
+      flex: 1; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 12px;
+      font-size: 15px; outline: none; resize: none; font-family: inherit;
+      transition: border 0.2s; min-height: 44px; max-height: 120px;
+    }
+    #msgInput:focus { border-color: var(--primary); }
+    #sendBtn {
+      width: 44px; height: 44px; background: var(--primary); color: #fff;
+      border: none; border-radius: 12px; font-size: 20px; cursor: pointer;
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    #sendBtn:hover { background: var(--primary-dark); }
+    #sendBtn:disabled { background: var(--border); cursor: not-allowed; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 480px) {
+      .rec-summary { grid-template-columns: repeat(2, 1fr); }
+      .bubble { max-width: 88%; }
+    }
+  </style>
 </head>
 <body>
-  <div class="wizard-shell">
-    <header class="topbar">
-      <div class="logo">room<span>fit</span></div>
-      <div class="meta">AI 실측 + 모바일 위저드 (PWA)</div>
-    </header>
 
-    <div class="steps" id="stepPills"></div>
+<!-- ══ Auth Screen ══ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">room<span>fit</span></div>
+    <p class="auth-tagline">AI 인테리어 코파일럿 — 방 사진 한 장으로 가구 추천까지</p>
+    <div class="auth-field">
+      <label>이메일</label>
+      <input id="email" type="email" placeholder="you@example.com" value="dev@roomfit.ai" />
+    </div>
+    <div class="auth-field">
+      <label>비밀번호</label>
+      <input id="password" type="password" placeholder="8자 이상" value="devpass1234" />
+    </div>
+    <div class="auth-btns">
+      <button class="btn-outline" onclick="register()">회원가입</button>
+      <button class="btn-primary" onclick="login()">로그인</button>
+    </div>
+    <button class="btn-dev" onclick="devLogin()">⚡ 개발자 모드 (자동 로그인)</button>
+    <p id="authMsg"></p>
+  </div>
+</div>
 
-    <section class="card step" data-step="1">
-      <h2>1) 계정</h2>
-      <p class="meta">일반 모드: 로그인 후 진행 / 개발자 모드: 자동 로그인</p>
-      <div class="field"><label>이메일</label><input id="email" value="dev@roomfit.ai"/></div>
-      <div class="field"><label>비밀번호</label><input id="password" type="password" value="devpass1234"/></div>
-      <div class="grid2"><button onclick="register()">회원가입</button><button onclick="login()">로그인</button></div>
-      <p id="authState" class="note">로그인 필요</p>
-    </section>
+<!-- ══ Chat Screen ══ -->
+<div id="chatScreen">
+  <header class="chat-header">
+    <div class="chat-logo">room<span>fit</span></div>
+    <span class="chat-user" id="chatUserName"></span>
+    <button class="btn-logout" onclick="logout()">로그아웃</button>
+  </header>
 
-    <section class="card step" data-step="2" hidden>
-      <h2>2) 방 기본 정보</h2>
-      <p class="meta">딱딱한 입력 대신, 아래에서 감성/용도/예산을 눌러서 고르세요.</p>
+  <div class="messages-area" id="messages"></div>
 
-      <div class="field">
-        <label>어떤 분위기를 원하세요?</label>
-        <div class="chips">
-          <button type="button" class="chip" id="moodChipWarm" onclick="pickMood('minimal_warm', 'moodChipWarm')">따뜻하고 아늑한 느낌</button>
-          <button type="button" class="chip" id="moodChipWhite" onclick="pickMood('minimal_white', 'moodChipWhite')">밝고 화이트 미니멀</button>
-          <button type="button" class="chip" id="moodChipScandi" onclick="pickMood('scandinavian_light', 'moodChipScandi')">스칸디 라이트 우드</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>방을 주로 어떻게 쓸까요?</label>
-        <div class="chips">
-          <button type="button" class="chip" id="purposeChipWorkSleep" onclick="pickPurpose('work_sleep', 'purposeChipWorkSleep')">일 + 수면</button>
-          <button type="button" class="chip" id="purposeChipFocus" onclick="pickPurpose('focus_work', 'purposeChipFocus')">집중 작업 위주</button>
-          <button type="button" class="chip" id="purposeChipStorage" onclick="pickPurpose('sleep_storage', 'purposeChipStorage')">수면 + 수납 강화</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>예산은 어느 정도인가요?</label>
-        <div class="chips">
-          <button type="button" class="chip" onclick="pickBudget(800000)">80만 원대</button>
-          <button type="button" class="chip" onclick="pickBudget(1200000)">120만 원대</button>
-          <button type="button" class="chip" onclick="pickBudget(1800000)">180만 원대</button>
-          <button type="button" class="chip" onclick="pickBudget(2500000)">250만 원대+</button>
-        </div>
-      </div>
-
-      <div class="field"><label>직접 입력(선택)</label><input id="budget" type="number" value="1200000"/></div>
-
-      <div class="grid2" style="display:none">
-        <div class="field"><label>무드</label><select id="mood"><option>minimal_warm</option><option>minimal_white</option><option>scandinavian_light</option></select></div>
-        <div class="field"><label>용도</label><select id="purpose"><option>work_sleep</option><option>focus_work</option><option>sleep_storage</option></select></div>
-      </div>
-
-      <div class="field check"><input id="manualToggle" type="checkbox" onchange="toggleManual()"/> <label for="manualToggle">치수 직접 입력(선택)</label></div>
-      <div id="manualDims" hidden>
-        <div class="grid2">
-          <div class="field"><label>폭(cm)</label><input id="width" type="number" value="280"/></div>
-          <div class="field"><label>길이(cm)</label><input id="length" type="number" value="340"/></div>
-        </div>
-        <div class="field"><label>높이(cm)</label><input id="height" type="number" value="240"/></div>
-      </div>
-      <p id="step2Error" class="error"></p>
-    </section>
-
-    <section class="card step" data-step="3" hidden>
-      <h2>3) 사진 업로드 + 기준 물체</h2>
-      <p class="meta">정확한 AI 측정을 위해 아래 가이드를 따라 촬영해 주세요.</p>
-
-      <div class="guide">
-        <h4>권장 촬영 순서 (최소 4장, 권장 6~8장)</h4>
-        <ul>
-          <li>① 출입문 근처에서 방 전체가 보이게 1장</li>
-          <li>② 창문 방향에서 반대편 벽이 보이게 1장</li>
-          <li>③ 좌/우 코너(바닥-벽 경계) 각 1장</li>
-          <li>④ 천장 모서리 또는 문틀이 보이게 1장 (높이 추정 보조)</li>
-        </ul>
-      </div>
-
-      <div class="guide">
-        <h4>촬영 품질 체크</h4>
-        <ul>
-          <li>밝은 조명에서 촬영 (역광 피하기)</li>
-          <li>손떨림 없이 정지 후 촬영</li>
-          <li>가구가 너무 가까이 붙지 않게 한 걸음 뒤에서 촬영</li>
-          <li>같은 위치에서 연속 촬영하지 말고 각도 변경</li>
-        </ul>
-      </div>
-
-      <div class="field"><label>기준 물체</label><select id="ref"><option value="a4_long">A4 긴 변 (권장)</option><option value="credit_card">신용카드</option><option value="door_single">싱글 도어</option><option value="desk_standard">120cm 책상</option><option value="single_bed">싱글 침대</option></select></div>
-      <p class="note">기준 물체가 프레임에 1~2회 이상 보이게 찍으면 정확도가 올라갑니다.</p>
-
-      <div class="field"><label>방 사진</label><input id="photos" type="file" multiple accept="image/*" onchange="updatePhotoGuide()"/></div>
-      <p id="photoCountHint" class="note">현재 0장 선택됨 · 최소 2장, 권장 6장 이상</p>
-      <p id="step3Error" class="error"></p>
-    </section>
-
-    <section class="card step" data-step="4" hidden>
-      <h2>4) AI 추정 결과 확인/수정</h2>
-      <div id="aiSummary" class="meta">아직 추정 전입니다.</div>
-      <div class="grid2">
-        <div class="field"><label>폭(cm)</label><input id="rvWidth" type="number"/></div>
-        <div class="field"><label>길이(cm)</label><input id="rvLength" type="number"/></div>
-      </div>
-      <div class="field"><label>높이(cm)</label><input id="rvHeight" type="number"/></div>
-      <p class="note">필요 시 수정 후 다음 단계로 넘어가면 반영됩니다.</p>
-      <p id="step4Error" class="error"></p>
-    </section>
-
-    <section class="card step" data-step="5" hidden>
-      <h2>5) 추천 결과 + 근거/히스토리</h2>
-      <div class="kpi">
-        <div class="box"><div class="label">총 가격</div><div id="kpiPrice" class="value">-</div></div>
-        <div class="box"><div class="label">공간 적합도</div><div id="kpiFit" class="value">-</div></div>
-        <div class="box"><div class="label">스타일 점수</div><div id="kpiStyle" class="value">-</div></div>
-      </div>
-      <h3>추천 품목</h3><div id="items" class="items"></div>
-      <h3>카테고리별 대안</h3><div id="alts" class="items"></div>
-      <h3>저장/공유용 요약</h3>
-      <div class="field"><textarea id="shareSummary" rows="6" readonly></textarea></div>
-      <div class="grid2"><button class="ghost" onclick="copySummary()">요약 복사</button><button onclick="shareSummaryText()">공유</button></div>
-      <h3>최근 히스토리</h3><div id="history" class="items"></div>
-    </section>
-
-    <div class="sticky-cta">
-      <button id="prevBtn" class="ghost" onclick="prevStep()">이전</button>
-      <button id="nextBtn" onclick="nextStep()">다음</button>
+  <div class="input-area">
+    <div id="photoPreview"></div>
+    <div class="input-row">
+      <button class="btn-photo" onclick="document.getElementById('photoInput').click()" title="사진 첨부">📷</button>
+      <input type="file" id="photoInput" accept="image/*" multiple hidden onchange="handlePhotos(event)" />
+      <textarea
+        id="msgInput"
+        placeholder="방에 대해 자유롭게 얘기해 주세요..."
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button id="sendBtn" onclick="sendMsg()" title="전송">➤</button>
     </div>
   </div>
+</div>
 
 <script>
-let token = localStorage.getItem('roomfit_token') || null;
-let step = 1;
-let roomId = null;
-let aiEstimate = null;
-const totalSteps = 5;
-const fmt = (n) => new Intl.NumberFormat('ko-KR').format(n || 0);
+// ── State ──
+let token = localStorage.getItem('rf_token') || '';
+let sessionId = null;
+let pendingPhotos = []; // {file, objectUrl}
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(() => {});
-
-function headers(json=true){ const h={}; if (json) h['Content-Type']='application/json'; if(token) h['Authorization']=`Bearer ${token}`; return h; }
-function safeJson(r){ return r.json().catch(()=>({})); }
-function setAuthState(t){ document.getElementById('authState').textContent=t; }
-
-function renderStep(){
-  document.querySelectorAll('.step').forEach(el => el.hidden = Number(el.dataset.step)!==step);
-  const pills = [];
-  for(let i=1;i<=totalSteps;i++) pills.push(`<span class="pill ${i===step?'on':''}">${i}</span>`);
-  document.getElementById('stepPills').innerHTML = pills.join('');
-  document.getElementById('prevBtn').disabled = step===1;
-  document.getElementById('nextBtn').textContent = step===5 ? '추천 다시 실행' : '다음';
-}
-
-async function register(){
-  const r = await fetch('/v1/auth/register',{method:'POST',headers:headers(),body:JSON.stringify({email:email.value.trim(),password:password.value,display_name:'Wizard User'})});
-  const d = await safeJson(r); if(!r.ok) return setAuthState('회원가입 실패: '+(d.detail||'error'));
-  token=d.token; localStorage.setItem('roomfit_token',token); setAuthState('로그인됨: '+d.user.email);
-}
-async function login(){
-  const r = await fetch('/v1/auth/login',{method:'POST',headers:headers(),body:JSON.stringify({email:email.value.trim(),password:password.value})});
-  const d = await safeJson(r); if(!r.ok) return setAuthState('로그인 실패: '+(d.detail||'error'));
-  token=d.token; localStorage.setItem('roomfit_token',token); setAuthState('로그인됨: '+d.user.email);
-}
-
-async function ensureSession(){
-  if(token) return true;
-  const r = await fetch('/v1/dev/session',{method:'POST'});
-  if(!r.ok) return false;
-  const d = await safeJson(r);
-  if(!d.token) return false;
-  token = d.token;
-  localStorage.setItem('roomfit_token', token);
-  setAuthState(`개발자 모드 자동 로그인: ${d.user?.email || 'dev'}`);
-  return true;
-}
-
-function setActive(groupIds, activeId){
-  groupIds.forEach(id => { const el = document.getElementById(id); if(el) el.classList.remove('on'); });
-  const active = document.getElementById(activeId);
-  if(active) active.classList.add('on');
-}
-
-function pickMood(value, chipId){
-  mood.value = value;
-  setActive(['moodChipWarm','moodChipWhite','moodChipScandi'], chipId);
-}
-
-function pickPurpose(value, chipId){
-  purpose.value = value;
-  setActive(['purposeChipWorkSleep','purposeChipFocus','purposeChipStorage'], chipId);
-}
-
-function pickBudget(value){
-  budget.value = value;
-}
-
-function updatePhotoGuide(){
-  const count = photos.files?.length || 0;
-  if(count < 2) photoCountHint.textContent = `현재 ${count}장 선택됨 · 최소 2장 필요`;
-  else if(count < 4) photoCountHint.textContent = `현재 ${count}장 선택됨 · 가능하지만 4장 이상 권장`;
-  else if(count < 6) photoCountHint.textContent = `현재 ${count}장 선택됨 · 좋습니다. 6~8장이 가장 안정적`;
-  else if(count <= 12) photoCountHint.textContent = `현재 ${count}장 선택됨 · 매우 좋음 (권장 범위)`;
-  else photoCountHint.textContent = `현재 ${count}장 선택됨 · 최대 12장까지 업로드 가능`;
-}
-
-function toggleManual(){ manualDims.hidden = !manualToggle.checked; }
-
-async function nextStep(){
-  if(step===1){
-    const ok = await ensureSession();
-    if(!ok) return setAuthState('먼저 로그인해줘요');
-    step=2; return renderStep();
+// ── Init ──
+(function init() {
+  if (token) {
+    showChat();
+    addWelcomeMsg();
   }
-  if(step===2){
-    step2Error.textContent='';
-    if(Number(budget.value)<100000) return step2Error.textContent='예산은 100,000원 이상 입력';
-    if(manualToggle.checked){
-      const r = await fetch('/v1/room/estimate',{method:'POST',headers:headers(),body:JSON.stringify({width_cm:Number(width.value),length_cm:Number(length.value),height_cm:Number(height.value),mood:mood.value,purpose:purpose.value,budget_krw:Number(budget.value)})});
-      const d = await safeJson(r); if(!r.ok) return step2Error.textContent=(d.detail||'방 정보 저장 실패');
-      roomId = d.room_profile.room_id;
-    }
-    step=3; return renderStep();
-  }
-  if(step===3){
-    step3Error.textContent='';
-    const files = photos.files;
-    if(files.length<2 || files.length>12) return step3Error.textContent='사진 2~12장을 선택해주세요.';
-    const form = new FormData();
-    form.append('reference_object', ref.value); form.append('mood', mood.value); form.append('purpose', purpose.value); form.append('budget_krw', budget.value);
-    if(roomId) form.append('room_id', roomId);
-    for(const f of files) form.append('files', f);
-    const r = await fetch('/v1/room/auto-estimate',{method:'POST',headers:token?{'Authorization':`Bearer ${token}`}:{},body:form});
-    const d = await safeJson(r); if(!r.ok) return step3Error.textContent=(d.detail||'AI 추정 실패');
-    roomId = d.room_profile.room_id; aiEstimate = d.room_profile;
-    rvWidth.value = aiEstimate.width_cm; rvLength.value = aiEstimate.length_cm; rvHeight.value = aiEstimate.height_cm;
-    const confPct = Math.round((aiEstimate.estimate_confidence||0)*100);
-    aiSummary.textContent = `신뢰도 ${confPct}% · 소스 ${aiEstimate.estimate_source}`;
-    if(aiEstimate.needs_manual_review){
-      aiSummary.textContent += ' · 신뢰도 낮음: 수정/재촬영 권장';
-      step4Error.textContent = (aiEstimate.recapture_guidance||[]).join(' / ');
-    }
-    step=4; return renderStep();
-  }
-  if(step===4){
-    step4Error.textContent='';
-    if(!roomId) return step4Error.textContent='room_id 누락';
-    const r = await fetch('/v1/room/estimate',{method:'POST',headers:headers(),body:JSON.stringify({room_id:roomId,width_cm:Number(rvWidth.value),length_cm:Number(rvLength.value),height_cm:Number(rvHeight.value),mood:mood.value,purpose:purpose.value,budget_krw:Number(budget.value),estimate_source:'ai_reviewed',estimate_confidence:aiEstimate?.estimate_confidence||0.5})});
-    const d = await safeJson(r); if(!r.ok) return step4Error.textContent=(d.detail||'치수 저장 실패');
-    await runRecommendation();
-    step=5; return renderStep();
-  }
-  if(step===5){ await runRecommendation(); }
-}
+})();
 
-function prevStep(){ if(step>1){step--;renderStep();} }
-
-async function runRecommendation(){
-  const idem = `wiz-${roomId||'none'}-${mood.value}-${purpose.value}`;
-  const h = headers(); h['Idempotency-Key']=idem;
-  const r = await fetch('/v1/recommendations',{method:'POST',headers:h,body:JSON.stringify({room_id:roomId,required_categories:['bed','desk','chair','storage']})});
-  const d = await safeJson(r); if(!r.ok) return;
-  kpiPrice.textContent = d.summary?.total_price_krw ? `${fmt(d.summary.total_price_krw)}원` : '-';
-  kpiFit.textContent = d.summary?.fit_score ?? '-';
-  kpiStyle.textContent = d.summary?.style_score ?? '-';
-  items.innerHTML = (d.items||[]).map(i=>`<article class="item"><span class="badge">${i.category}</span><h3>${i.name}</h3><p><b>${fmt(i.price_krw)}원</b></p><p>${i.reason}</p><p><a href="${i.url}" target="_blank">상품 링크</a></p></article>`).join('') || '<p class="meta">결과 없음</p>';
-  alts.innerHTML = Object.entries(d.alternatives||{}).map(([cat,list])=>`<article class="item"><span class="badge">${cat}</span>${(list||[]).map(a=>`<p>${a.name} · ${fmt(a.price_krw)}원</p>`).join('')}</article>`).join('') || '<p class="meta">대안 없음</p>';
-  shareSummary.value = buildShareSummary(d);
-  await refreshHistory();
-}
-
-async function refreshHistory(){
-  const r = await fetch('/v1/recommendations/history?limit=8',{headers:headers(false)}); const d = await safeJson(r); if(!r.ok) return;
-  history.innerHTML = (d.items||[]).map(h=>`<article class="item"><span class="badge">run</span><h3>${h.run_id}</h3><p>${fmt(h.total_price_krw)}원 · fit ${h.fit_score}</p><p>${h.created_at}</p></article>`).join('') || '<p class="meta">히스토리 없음</p>';
-}
-
-function buildShareSummary(d){
-  const lines = [
-    `[Roomfit 추천 요약]`,
-    `총액: ${fmt(d.summary?.total_price_krw||0)}원 / 예산 ${fmt(d.summary?.budget_krw||0)}원`,
-    `예산 잔액: ${fmt(d.summary?.remaining_budget_krw||0)}원 (${d.summary?.budget_usage_pct||0}% 사용)`,
-    `공간 적합도 ${d.summary?.fit_score ?? '-'} · 스타일 ${d.summary?.style_score ?? '-'}`,
-    ``,
-    ...(d.items||[]).map(i=>`- ${i.category}: ${i.name} (${fmt(i.price_krw)}원)`),
-  ];
-  return lines.join('\n');
-}
-
-async function copySummary(){
-  if(!shareSummary.value) return;
-  await navigator.clipboard.writeText(shareSummary.value);
-}
-
-async function shareSummaryText(){
-  if(!shareSummary.value) return;
-  if(navigator.share){
-    await navigator.share({title:'Roomfit 추천', text: shareSummary.value});
-  } else {
-    await copySummary();
+// ── Auth ──
+async function register() {
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  setAuthMsg('');
+  try {
+    const r = await api('/v1/auth/register', 'POST', { email, password: pw, display_name: email.split('@')[0] });
+    token = r.token;
+    localStorage.setItem('rf_token', token);
+    setAuthMsg('가입 완료! 로그인합니다...', 'success');
+    setTimeout(() => { showChat(); addWelcomeMsg(); }, 600);
+  } catch (e) {
+    setAuthMsg(e.message || '회원가입 실패', 'error');
   }
 }
 
-if(token) setAuthState('기존 세션 토큰 감지됨');
-else ensureSession();
-pickMood('minimal_warm', 'moodChipWarm');
-pickPurpose('work_sleep', 'purposeChipWorkSleep');
-renderStep();
+async function login() {
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  setAuthMsg('');
+  try {
+    const r = await api('/v1/auth/login', 'POST', { email, password: pw });
+    token = r.token;
+    localStorage.setItem('rf_token', token);
+    showChat();
+    addWelcomeMsg();
+  } catch (e) {
+    setAuthMsg(e.message || '로그인 실패', 'error');
+  }
+}
+
+async function devLogin() {
+  setAuthMsg('개발자 모드로 로그인 중...', '');
+  try {
+    const r = await api('/v1/dev/session', 'POST', null, true);
+    token = r.token;
+    localStorage.setItem('rf_token', token);
+    showChat();
+    addWelcomeMsg();
+  } catch (e) {
+    // DEV_MODE가 꺼진 경우 일반 로그인으로 시도
+    await login();
+  }
+}
+
+function logout() {
+  token = '';
+  sessionId = null;
+  pendingPhotos = [];
+  localStorage.removeItem('rf_token');
+  document.getElementById('chatScreen').classList.remove('active');
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('photoPreview').innerHTML = '';
+}
+
+// ── UI helpers ──
+function showChat() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('chatScreen').classList.add('active');
+  // 유저 이름 표시 시도
+  api('/v1/me', 'GET').then(r => {
+    document.getElementById('chatUserName').textContent = r.user?.display_name || '';
+  }).catch(() => {});
+}
+
+function setAuthMsg(msg, type = '') {
+  const el = document.getElementById('authMsg');
+  el.textContent = msg;
+  el.className = type;
+}
+
+function addWelcomeMsg() {
+  addAiMsg('안녕하세요! 저는 **Roomfit AI** 인테리어 코파일럿이에요. 🏠\n\n방 꾸미기에 대해 자유롭게 얘기해 주세요. 예를 들면:\n• "원룸인데 따뜻하고 아늑하게 꾸미고 싶어요"\n• "방 사진 볼게요" (📷 버튼으로 사진 첨부)\n• "예산은 150만원 정도예요"\n\n이야기하다 보면 딱 맞는 가구를 추천해 드릴게요!');
+}
+
+// ── Message helpers ──
+function addAiMsg(text, recData = null) {
+  const area = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.innerHTML = `<div class="avatar">RF</div><div class="bubble">${mdToHtml(text)}${recData ? renderRec(recData) : ''}</div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return div;
+}
+
+function addUserMsg(text, photos = []) {
+  const area = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  const photoHtml = photos.length
+    ? `<div class="bubble-photos">${photos.map(p => `<img src="${p}" />`).join('')}</div>`
+    : '';
+  div.innerHTML = `<div class="bubble">${escHtml(text)}${photoHtml}</div><div class="avatar">나</div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function addLoadingMsg() {
+  const area = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.id = 'loadingMsg';
+  div.innerHTML = `<div class="avatar">RF</div><div class="bubble"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  return div;
+}
+
+function removeLoadingMsg() {
+  const el = document.getElementById('loadingMsg');
+  if (el) el.remove();
+}
+
+// ── Send ──
+async function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text && pendingPhotos.length === 0) return;
+
+  const displayText = text || '(사진 첨부)';
+  const photoUrls = pendingPhotos.map(p => p.objectUrl);
+  addUserMsg(displayText, photoUrls);
+
+  input.value = '';
+  input.style.height = '';
+  document.getElementById('sendBtn').disabled = true;
+
+  const photos = [...pendingPhotos];
+  pendingPhotos = [];
+  document.getElementById('photoPreview').innerHTML = '';
+
+  addLoadingMsg();
+
+  try {
+    const fd = new FormData();
+    fd.append('message', displayText);
+    if (sessionId) fd.append('session_id', sessionId);
+    photos.forEach(p => fd.append('files', p.file));
+
+    const r = await apiFd('/v1/chat', fd);
+    removeLoadingMsg();
+    sessionId = r.session_id;
+    addAiMsg(r.reply, r.recommendation);
+  } catch (e) {
+    removeLoadingMsg();
+    addAiMsg(`오류가 발생했어요: ${e.message}`);
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('msgInput').focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMsg();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ── Photos ──
+function handlePhotos(e) {
+  const files = Array.from(e.target.files);
+  files.forEach(f => {
+    const url = URL.createObjectURL(f);
+    pendingPhotos.push({ file: f, objectUrl: url });
+  });
+  renderPhotoPreview();
+  e.target.value = '';
+}
+
+function renderPhotoPreview() {
+  const area = document.getElementById('photoPreview');
+  area.innerHTML = pendingPhotos.map((p, i) => `
+    <div class="preview-thumb">
+      <img src="${p.objectUrl}" />
+      <button class="remove-btn" onclick="removePhoto(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function removePhoto(idx) {
+  URL.revokeObjectURL(pendingPhotos[idx].objectUrl);
+  pendingPhotos.splice(idx, 1);
+  renderPhotoPreview();
+}
+
+// ── Render recommendation ──
+function renderRec(rec) {
+  if (!rec || !rec.summary || !rec.items) return '';
+  const { summary, items } = rec;
+  const price = summary.total_price_krw?.toLocaleString('ko-KR');
+  const usage = summary.budget_usage_pct;
+  const remaining = summary.remaining_budget_krw?.toLocaleString('ko-KR');
+
+  const itemsHtml = items.map(item => `
+    <div class="rec-item">
+      <div>
+        <div class="name">${escHtml(item.name)}</div>
+        <div class="cat">${escHtml(item.category)}</div>
+      </div>
+      <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
+      ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">보기</a>` : ''}
+    </div>
+  `).join('');
+
+  return `
+    <div class="rec-card">
+      <h4>🛋 추천 가구 목록</h4>
+      <div class="rec-summary">
+        <div class="rec-stat"><div class="val">${price}원</div><div class="lbl">총 금액</div></div>
+        <div class="rec-stat"><div class="val">${usage}%</div><div class="lbl">예산 사용</div></div>
+        <div class="rec-stat"><div class="val">${remaining}원</div><div class="lbl">잔여 예산</div></div>
+      </div>
+      <div class="rec-items">${itemsHtml}</div>
+    </div>
+  `;
+}
+
+// ── API helpers ──
+async function api(path, method = 'GET', body = null, noAuth = false) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (!noAuth && token) headers['Authorization'] = `Bearer ${token}`;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+async function apiFd(path, fd) {
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const r = await fetch(path, { method: 'POST', headers, body: fd });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+// ── Utils ──
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function mdToHtml(text) {
+  // 간단한 마크다운 처리 (bold, bullet)
+  return escHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^• (.+)$/gm, '<span style="display:block;padding-left:12px">• $1</span>');
+}
 </script>
 </body>
 </html>

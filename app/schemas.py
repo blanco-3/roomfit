@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -16,7 +16,7 @@ class LoginRequest(BaseModel):
 
 
 class RoomEstimateRequest(BaseModel):
-    room_id: str | None = None
+    room_id: Optional[str] = None
     width_cm: int = Field(..., ge=180, le=1200)
     length_cm: int = Field(..., ge=180, le=1200)
     height_cm: int = Field(240, ge=180, le=400)
@@ -24,10 +24,15 @@ class RoomEstimateRequest(BaseModel):
     purpose: str = "work_sleep"
     budget_krw: int = Field(..., ge=100000)
     estimate_source: str = "manual"
-    estimate_confidence: float | None = Field(None, ge=0, le=1)
-    estimation_notes: str | None = None
+    estimate_confidence: Optional[float] = Field(None, ge=0, le=1)
+    estimation_notes: Optional[str] = None
 
 
 class RecommendationRequest(BaseModel):
     room_id: str
     required_categories: List[str] = Field(default_factory=lambda: ["bed", "desk", "chair", "storage"])
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    session_id: Optional[str] = None
