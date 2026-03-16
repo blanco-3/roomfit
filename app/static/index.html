@@ -196,13 +196,18 @@
       border: 1px solid var(--border-hi); border-radius: 18px;
       padding: 18px; margin-top: 12px;
       box-shadow: var(--sh-md);
+      animation: rec-slide-in 0.4s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes rec-slide-in {
+      from { opacity: 0; transform: translateY(16px) scale(0.97); }
+      to   { opacity: 1; transform: none; }
     }
     .rec-card h4 {
       font-size: 13px; font-weight: 700; margin-bottom: 14px;
       color: var(--text-2); letter-spacing: 0.3px; text-transform: uppercase;
     }
     .rec-summary {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px;
     }
     .rec-stat {
       background: var(--grad-soft); border: 1px solid rgba(56,189,248,.12);
@@ -213,61 +218,104 @@
       background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .rec-stat .lbl { font-size: 10px; color: var(--text-3); margin-top: 3px; }
-    .rec-items { display: flex; flex-direction: column; gap: 10px; }
 
-    .rec-group { margin-bottom: 16px; }
+    /* ── Category group with horizontal scroll ── */
+    .rec-group { margin-bottom: 20px; }
     .rec-group:last-child { margin-bottom: 0; }
     .rec-group-label {
-      font-size: 11px; font-weight: 700; color: var(--text-3);
-      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 7px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;
+    }
+    .rec-group-label span { color: var(--text-3); font-weight: 400; }
+
+    /* Horizontal card rail */
+    .rec-rail {
+      display: flex; gap: 10px;
+      overflow-x: auto; padding-bottom: 6px;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .rec-rail::-webkit-scrollbar { height: 4px; }
+    .rec-rail::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+    /* Individual product card (vertical) */
+    .rec-pcard {
+      flex: 0 0 160px;
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: default;
+      position: relative;
+    }
+    .rec-pcard:hover {
+      transform: translateY(-4px) scale(1.01);
+      border-color: var(--border-hi);
+      box-shadow: 0 12px 32px rgba(0,0,0,.5);
+    }
+    .rec-pcard.alt { opacity: 0.72; }
+    .rec-pcard.alt:hover { opacity: 1; }
+
+    .rec-pcard-img-wrap {
+      width: 100%; height: 120px; overflow: hidden;
+      background: var(--glass-md); position: relative;
+    }
+    .rec-pcard-img-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform 0.35s;
+    }
+    .rec-pcard:hover .rec-pcard-img-wrap img { transform: scale(1.06); }
+    .rec-pcard-img-ph {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center; font-size: 32px;
     }
 
-    .rec-item {
-      display: flex; align-items: center;
-      padding: 10px 12px; background: var(--glass); border: 1px solid var(--border);
-      border-radius: 14px; gap: 12px; transition: background 0.2s, border-color 0.2s;
+    .rec-pcard-body { padding: 10px 10px 8px; }
+    .rec-pcard .pname {
+      font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      min-height: 32px;
     }
-    .rec-item:hover { background: var(--glass-md); border-color: var(--border-hi); }
-    .rec-item.alt { opacity: 0.72; }
-    .rec-item.alt:hover { opacity: 1; }
-
-    .rec-item-img {
-      width: 52px; height: 52px; object-fit: cover; border-radius: 10px;
-      flex-shrink: 0; background: var(--glass-md); border: 1px solid var(--border);
-    }
-    .rec-item-img-placeholder {
-      width: 52px; height: 52px; border-radius: 10px; flex-shrink: 0;
-      background: var(--glass-md); border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center; font-size: 20px;
-    }
-    .rec-item-info { flex: 1; min-width: 0; }
-    .rec-item .name {
-      font-size: 13px; font-weight: 600; color: var(--text);
+    .rec-pcard .pdesc {
+      font-size: 10px; color: var(--text-3); margin-top: 3px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .rec-item .cat { margin-top: 3px; }
-    .rec-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
-    .rec-item .price {
+    .rec-pcard-footer {
+      padding: 0 10px 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    }
+    .rec-pcard .pprice {
       font-size: 13px; font-weight: 700;
       background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .rec-item a {
-      font-size: 11px; font-weight: 600; color: #fff;
-      background: var(--grad);
-      padding: 4px 10px; border-radius: 7px; text-decoration: none;
-      box-shadow: 0 2px 8px rgba(56,189,248,.2);
-      transition: opacity 0.2s;
+    .rec-pcard .pbuy {
+      font-size: 10px; font-weight: 700; color: #fff;
+      background: var(--grad); padding: 4px 9px; border-radius: 6px;
+      text-decoration: none; box-shadow: 0 2px 8px rgba(56,189,248,.2);
+      transition: opacity 0.2s; flex-shrink: 0;
     }
-    .rec-item a:hover { opacity: 0.85; }
+    .rec-pcard .pbuy:hover { opacity: 0.85; }
 
-    .rec-badge {
-      display: inline-block; font-size: 10px; font-weight: 700;
-      padding: 2px 7px; border-radius: 5px;
-      background: var(--grad); color: #fff;
+    /* rank badge inside image */
+    .rec-pcard .rank-badge {
+      position: absolute; top: 7px; left: 7px;
+      font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
+      padding: 3px 7px; border-radius: 5px; z-index: 1;
     }
-    .rec-badge.alt {
-      background: var(--glass-md); color: var(--text-3); border: 1px solid var(--border);
-      -webkit-background-clip: unset; -webkit-text-fill-color: unset;
+    .rec-pcard .rank-badge.top {
+      background: var(--grad); color: #fff;
+      box-shadow: 0 2px 8px rgba(56,189,248,.4);
+    }
+    .rec-pcard .rank-badge.other {
+      background: rgba(0,0,0,.55); color: var(--text-2);
+      backdrop-filter: blur(4px);
+    }
+
+    /* source badge */
+    .rec-pcard .src-badge {
+      position: absolute; top: 7px; right: 7px;
+      font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+      background: rgba(0,0,0,.6); color: var(--text-2);
+      backdrop-filter: blur(4px); z-index: 1;
     }
 
     /* ── Loading ── */
@@ -659,15 +707,20 @@ const CAT_ICONS = { bed:'🛏', desk:'🪑', chair:'💺', storage:'🗄', sofa:
 
 // ── Render recommendation ──
 const CAT_LABELS = { bed:'침대', desk:'책상', chair:'의자', storage:'수납', sofa:'소파', table:'테이블' };
+const SRC_LABELS = {
+  ikea_kr:'IKEA', hanssem:'한샘', iloom:'일룸',
+  naver_shopping:'네이버', living_house:'리빙하우스',
+};
 
 function renderRec(rec) {
   if (!rec || !rec.summary || !rec.items) return '';
   const { summary, items } = rec;
-  const price = summary.total_price_krw?.toLocaleString('ko-KR');
-  const usage = summary.budget_usage_pct;
+  const price     = summary.total_price_krw?.toLocaleString('ko-KR');
+  const usage     = summary.budget_usage_pct;
   const remaining = summary.remaining_budget_krw?.toLocaleString('ko-KR');
+  const catCount  = summary.selected_count;
 
-  // 카테고리별 그룹화
+  // 카테고리별 그룹화 (순서 보존)
   const groups = {};
   items.forEach(item => {
     if (!groups[item.category]) groups[item.category] = [];
@@ -675,39 +728,61 @@ function renderRec(rec) {
   });
 
   const groupsHtml = Object.entries(groups).map(([cat, catItems]) => {
-    const icon = CAT_ICONS[cat] || '🪑';
+    const icon  = CAT_ICONS[cat] || '🪑';
     const label = CAT_LABELS[cat] || cat;
-    const itemsHtml = catItems.map((item, idx) => {
-      const imgHtml = item.image_url
-        ? `<img class="rec-item-img" src="${escHtml(item.image_url)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="rec-item-img-placeholder" style="display:none">${icon}</div>`
-        : `<div class="rec-item-img-placeholder">${icon}</div>`;
-      const badge = idx === 0 ? '<span class="rec-badge">추천</span>' : `<span class="rec-badge alt">${idx+1}위</span>`;
+
+    const cardsHtml = catItems.map((item, idx) => {
+      const isTop = idx === 0;
+      const rankBadge = isTop
+        ? `<span class="rank-badge top">BEST</span>`
+        : `<span class="rank-badge other">${idx + 1}위</span>`;
+      const srcLabel = SRC_LABELS[item.source] || item.source || '';
+      const srcBadge = srcLabel ? `<span class="src-badge">${escHtml(srcLabel)}</span>` : '';
+      const desc = item.description ? `<div class="pdesc">${escHtml(item.description)}</div>` : '';
+
+      const imgInner = item.image_url
+        ? `<img src="${escHtml(item.image_url)}" alt="" loading="lazy"
+             onerror="this.style.display='none';this.parentNode.querySelector('.rec-pcard-img-ph').style.display='flex'"
+           ><div class="rec-pcard-img-ph" style="display:none">${icon}</div>`
+        : `<div class="rec-pcard-img-ph">${icon}</div>`;
+
+      const buyBtn = item.url
+        ? `<a class="pbuy" href="${escHtml(item.url)}" target="_blank" rel="noopener">구매</a>`
+        : '';
+
       return `
-        <div class="rec-item${idx > 0 ? ' alt' : ''}">
-          ${imgHtml}
-          <div class="rec-item-info">
-            <div class="name">${escHtml(item.name)}</div>
-            <div class="cat">${badge}</div>
+        <div class="rec-pcard${isTop ? '' : ' alt'}">
+          <div class="rec-pcard-img-wrap">
+            ${rankBadge}${srcBadge}
+            ${imgInner}
           </div>
-          <div class="rec-item-right">
-            <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
-            ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">구매</a>` : ''}
+          <div class="rec-pcard-body">
+            <div class="pname">${escHtml(item.name)}</div>
+            ${desc}
+          </div>
+          <div class="rec-pcard-footer">
+            <div class="pprice">${item.price_krw?.toLocaleString('ko-KR')}원</div>
+            ${buyBtn}
           </div>
         </div>`;
     }).join('');
 
-    return `<div class="rec-group"><div class="rec-group-label">${icon} ${label}</div>${itemsHtml}</div>`;
+    return `
+      <div class="rec-group">
+        <div class="rec-group-label">${icon} ${label} <span>(${catItems.length}개 옵션)</span></div>
+        <div class="rec-rail">${cardsHtml}</div>
+      </div>`;
   }).join('');
 
   return `
     <div class="rec-card">
-      <h4>🛋 추천 가구 목록</h4>
+      <h4>🛋 AI 추천 가구 — ${catCount}개 카테고리</h4>
       <div class="rec-summary">
-        <div class="rec-stat"><div class="val">${price}원</div><div class="lbl">총 금액(1위 기준)</div></div>
-        <div class="rec-stat"><div class="val">${usage}%</div><div class="lbl">예산 사용</div></div>
+        <div class="rec-stat"><div class="val">${price}원</div><div class="lbl">총 금액 (1순위 기준)</div></div>
+        <div class="rec-stat"><div class="val">${usage}%</div><div class="lbl">예산 사용률</div></div>
         <div class="rec-stat"><div class="val">${remaining}원</div><div class="lbl">잔여 예산</div></div>
       </div>
-      <div class="rec-items">${groupsHtml}</div>
+      ${groupsHtml}
     </div>`;
 }
 
