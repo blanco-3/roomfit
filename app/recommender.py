@@ -45,6 +45,13 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
         scored.sort(key=lambda x: x[0], reverse=True)
         best_score, best_item = scored[0]
 
+        # reason: 실제 매칭된 스타일 태그 기반
+        matched = set(t.lower() for t in best_item.get("style_tags", [])) & (
+            set(room["mood"].lower().replace("-", "_").split("_")) |
+            set(room["purpose"].lower().replace("-", "_").split("_"))
+        )
+        reason = f"스타일 매칭: {', '.join(sorted(matched))}" if matched else "예산/치수 적합"
+
         selected.append({
             "id": best_item["id"],
             "name": best_item["name"],
@@ -57,8 +64,9 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict]) -
             },
             "source": best_item["source"],
             "url": best_item["url"],
+            "image_url": best_item.get("image_url", ""),
             "score": best_score,
-            "reason": "예산/치수/무드 적합",
+            "reason": reason,
         })
         alternatives[cat] = [
             {

@@ -133,14 +133,28 @@
     .rec-stat .lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
     .rec-items { display: flex; flex-direction: column; gap: 8px; }
     .rec-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 12px; background: var(--bg); border-radius: 10px; gap: 8px;
+      display: flex; align-items: center;
+      padding: 10px 12px; background: var(--bg); border-radius: 10px; gap: 10px;
     }
-    .rec-item .name { font-size: 14px; font-weight: 600; flex: 1; }
-    .rec-item .cat { font-size: 11px; color: var(--text-muted); }
-    .rec-item .price { font-size: 14px; font-weight: 700; color: var(--primary); white-space: nowrap; }
-    .rec-item a { font-size: 12px; color: var(--primary); text-decoration: none; }
-    .rec-item a:hover { text-decoration: underline; }
+    .rec-item-img {
+      width: 56px; height: 56px; object-fit: cover; border-radius: 8px;
+      flex-shrink: 0; background: var(--border);
+    }
+    .rec-item-img-placeholder {
+      width: 56px; height: 56px; border-radius: 8px; flex-shrink: 0;
+      background: var(--border); display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .rec-item-info { flex: 1; min-width: 0; }
+    .rec-item .name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rec-item .cat { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .rec-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+    .rec-item .price { font-size: 13px; font-weight: 700; color: var(--primary); }
+    .rec-item a {
+      font-size: 11px; color: #fff; background: var(--primary);
+      padding: 3px 8px; border-radius: 6px; text-decoration: none; white-space: nowrap;
+    }
+    .rec-item a:hover { background: var(--primary-dark); }
 
     /* Loading bubble */
     .loading-dots { display: flex; gap: 5px; padding: 4px 0; }
@@ -423,7 +437,8 @@ async function sendMsg() {
 }
 
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // isComposing: 한국어 IME 조합 중에는 Enter 무시 (마지막 글자 이중전송 방지)
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     sendMsg();
   }
@@ -461,6 +476,9 @@ function removePhoto(idx) {
   renderPhotoPreview();
 }
 
+// ── Category icon map ──
+const CAT_ICONS = { bed:'🛏', desk:'🪑', chair:'💺', storage:'🗄', sofa:'🛋', table:'🪵' };
+
 // ── Render recommendation ──
 function renderRec(rec) {
   if (!rec || !rec.summary || !rec.items) return '';
@@ -469,16 +487,25 @@ function renderRec(rec) {
   const usage = summary.budget_usage_pct;
   const remaining = summary.remaining_budget_krw?.toLocaleString('ko-KR');
 
-  const itemsHtml = items.map(item => `
-    <div class="rec-item">
-      <div>
-        <div class="name">${escHtml(item.name)}</div>
-        <div class="cat">${escHtml(item.category)}</div>
-      </div>
-      <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
-      ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">보기</a>` : ''}
-    </div>
-  `).join('');
+  const itemsHtml = items.map(item => {
+    const icon = CAT_ICONS[item.category] || '🪑';
+    const imgHtml = item.image_url
+      ? `<img class="rec-item-img" src="${escHtml(item.image_url)}" alt="${escHtml(item.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="rec-item-img-placeholder" style="display:none">${icon}</div>`
+      : `<div class="rec-item-img-placeholder">${icon}</div>`;
+    const catLabel = { bed:'침대', desk:'책상', chair:'의자', storage:'수납', sofa:'소파', table:'테이블' }[item.category] || item.category;
+    return `
+      <div class="rec-item">
+        ${imgHtml}
+        <div class="rec-item-info">
+          <div class="name">${escHtml(item.name)}</div>
+          <div class="cat">${catLabel}</div>
+        </div>
+        <div class="rec-item-right">
+          <div class="price">${item.price_krw?.toLocaleString('ko-KR')}원</div>
+          ${item.url ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener">구매</a>` : ''}
+        </div>
+      </div>`;
+  }).join('');
 
   return `
     <div class="rec-card">
@@ -489,8 +516,7 @@ function renderRec(rec) {
         <div class="rec-stat"><div class="val">${remaining}원</div><div class="lbl">잔여 예산</div></div>
       </div>
       <div class="rec-items">${itemsHtml}</div>
-    </div>
-  `;
+    </div>`;
 }
 
 // ── API helpers ──
