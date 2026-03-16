@@ -468,9 +468,9 @@ async def chat(
     if result["trigger_recommend"] and result["extracted"]:
         extracted = result["extracted"]
         room_data = {
-            "width_cm": extracted.get("width_cm", 280),
-            "length_cm": extracted.get("length_cm", 340),
-            "height_cm": extracted.get("height_cm", 240),
+            "width_cm": extracted.get("width_cm") or 280,
+            "length_cm": extracted.get("length_cm") or 340,
+            "height_cm": extracted.get("height_cm") or 240,
             "mood": extracted.get("mood", "minimal_warm"),
             "purpose": extracted.get("purpose", "work_sleep"),
             "budget_krw": int(extracted.get("budget_krw", 1200000)),

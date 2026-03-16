@@ -5,48 +5,40 @@ import os
 import re
 from typing import Optional
 
-SYSTEM_PROMPT = """당신은 Roomfit AI 인테리어 코파일럿입니다.
-사용자가 방 꾸미기에 대해 이야기하면 친근하고 전문적인 인테리어 전문가처럼 대화하세요.
+SYSTEM_PROMPT = """You are Roomfit, an AI interior design copilot.
 
-역할:
-- 자연스러운 대화로 방의 분위기/용도/예산/원하는 가구를 파악하세요
-- 사진이 첨부되면 방의 현재 상태, 특징, 개선점을 구체적으로 설명하세요
-- 필요한 정보가 모이면 가구 추천을 제안하세요
+LANGUAGE RULE: Always reply in the exact same language the user writes in. Never mix languages within a single response. If the user writes in Korean, reply entirely in Korean. If English, reply entirely in English.
 
-정보 추출:
-대화에서 아래 항목들을 파악할 수 있을 때만, 응답 맨 끝에 다음 형식으로 포함하세요:
+YOUR ROLE:
+- Chat naturally like a friendly, professional interior designer
+- Help users find the right furniture by understanding their needs
+- Ask focused questions one at a time — don't ask multiple questions at once
+- When you have enough info, suggest furniture recommendations
+
+INFORMATION TO GATHER (through natural conversation):
+1. mood/atmosphere: minimal_warm / minimal_white / scandinavian_light / modern_dark / bohemian
+2. purpose: work_sleep / focus_work / sleep_storage / relax_only
+3. budget_krw: budget in Korean won (number only)
+4. room size: width_cm, length_cm, height_cm (optional)
+5. categories: which furniture they need (bed, desk, chair, storage, sofa, table)
+
+EXTRACTION RULE:
+Only when you have mood + purpose + budget_krw confirmed, append this block at the very end of your response (invisible to user):
 <extracted>
-{
-  "mood": "minimal_warm",
-  "purpose": "work_sleep",
-  "budget_krw": 1200000,
-  "categories": ["bed", "desk", "chair", "storage"],
-  "width_cm": 280,
-  "length_cm": 340,
-  "height_cm": 240
-}
+{"mood": "...", "purpose": "...", "budget_krw": 0, "categories": ["bed","desk","chair","storage"], "width_cm": null, "length_cm": null, "height_cm": null}
 </extracted>
 
-mood 값: minimal_warm / minimal_white / scandinavian_light / modern_dark / bohemian
-purpose 값: work_sleep / focus_work / sleep_storage / relax_only
-categories: bed, desk, chair, storage, sofa, shelf, lamp, wardrobe 중 선택
-
-규칙:
-- mood, purpose, budget_krw 세 가지가 모두 있어야 <extracted>를 포함하세요
-- 방 크기(width_cm, length_cm)는 알 수 없으면 생략하세요
-- categories는 사용자가 언급하지 않으면 기본값 ["bed", "desk", "chair", "storage"]를 사용하세요
-- <extracted> 태그는 절대 응답 본문에 보이지 않게 처리됩니다"""
+STYLE GUIDELINES:
+- Keep responses concise (2-4 sentences)
+- Ask only ONE follow-up question per turn
+- Be warm and encouraging, not robotic"""
 
 
 class ChatEngine:
     def __init__(self) -> None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            from openai import OpenAI  # lazy import
-            self.client = OpenAI(api_key=api_key)
-        else:
-            self.client = None
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        self._groq_key = os.getenv("GROQ_API_KEY")
+        self._google_key = os.getenv("GOOGLE_API_KEY")
+        self._openai_key = os.getenv("OPENAI_API_KEY")
 
     def chat(
         self,
@@ -54,68 +46,134 @@ class ChatEngine:
         user_message: str,
         image_b64_list: Optional[list[str]] = None,
     ) -> dict:
-        """멀티턴 대화 처리.
+        if self._groq_key:
+            return self._groq_chat(history, user_message)
+        if self._google_key:
+            return self._gemini_chat(history, user_message, image_b64_list)
+        if self._openai_key:
+            return self._openai_chat(history, user_message, image_b64_list)
+        return self._mock_response()
 
-        Args:
-            history: 이전 대화 [{"role": "user/assistant", "content": "..."}]
-            user_message: 현재 사용자 메시지
-            image_b64_list: base64 인코딩된 이미지 리스트 (선택)
+    # ------------------------------------------------------------------
+    # Groq
+    # ------------------------------------------------------------------
 
-        Returns:
-            {
-                "reply": str,               # 표시할 AI 응답 (extracted 태그 제거됨)
-                "extracted": dict | None,   # 추출된 방 파라미터
-                "trigger_recommend": bool,  # 추천 실행 여부
-            }
-        """
-        if not self.client:
-            return self._mock_response()
+    def _groq_chat(self, history: list[dict], user_message: str) -> dict:
+        from groq import Groq
 
-        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        client = Groq(api_key=self._groq_key)
+        model = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
+
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         messages.extend(history)
-
-        # 현재 메시지 구성 (이미지 첨부 여부에 따라)
-        if image_b64_list:
-            content: list = [{"type": "text", "text": user_message}]
-            for b64 in image_b64_list:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-                })
-            messages.append({"role": "user", "content": content})
-        else:
-            messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "user", "content": user_message})
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response = client.chat.completions.create(
+                model=model,
                 messages=messages,
                 max_tokens=1024,
             )
             raw_reply = response.choices[0].message.content or ""
         except Exception as exc:
-            return {
-                "reply": f"AI 응답 오류: {exc}",
-                "extracted": None,
-                "trigger_recommend": False,
-            }
+            return {"reply": f"AI 응답 오류: {exc}", "extracted": None, "trigger_recommend": False}
 
+        return self._build_result(raw_reply)
+
+    # ------------------------------------------------------------------
+    # Gemini
+    # ------------------------------------------------------------------
+
+    def _gemini_chat(
+        self,
+        history: list[dict],
+        user_message: str,
+        image_b64_list: Optional[list[str]] = None,
+    ) -> dict:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._google_key)
+        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
+
+        # 히스토리 변환
+        contents = []
+        for msg in history:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+
+        # 현재 메시지 파츠
+        parts: list = [types.Part(text=user_message)]
+        if image_b64_list:
+            import base64
+            for b64 in image_b64_list:
+                try:
+                    parts.append(types.Part(
+                        inline_data=types.Blob(mime_type="image/jpeg", data=base64.b64decode(b64))
+                    ))
+                except Exception:
+                    pass
+        contents.append(types.Content(role="user", parts=parts))
+
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+            )
+            raw_reply = response.text or ""
+        except Exception as exc:
+            return {"reply": f"AI 응답 오류: {exc}", "extracted": None, "trigger_recommend": False}
+
+        return self._build_result(raw_reply)
+
+    # ------------------------------------------------------------------
+    # OpenAI (fallback)
+    # ------------------------------------------------------------------
+
+    def _openai_chat(
+        self,
+        history: list[dict],
+        user_message: str,
+        image_b64_list: Optional[list[str]] = None,
+    ) -> dict:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=self._openai_key)
+        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages.extend(history)
+
+        if image_b64_list:
+            content: list = [{"type": "text", "text": user_message}]
+            for b64 in image_b64_list:
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": user_message})
+
+        try:
+            response = client.chat.completions.create(
+                model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                messages=messages,
+                max_tokens=1024,
+            )
+            raw_reply = response.choices[0].message.content or ""
+        except Exception as exc:
+            return {"reply": f"AI 응답 오류: {exc}", "extracted": None, "trigger_recommend": False}
+
+        return self._build_result(raw_reply)
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    def _build_result(self, raw_reply: str) -> dict:
         extracted = self._parse_extracted(raw_reply)
         clean_reply = self._strip_extracted_tag(raw_reply)
-
         trigger = extracted is not None and all(
             k in extracted for k in ("mood", "purpose", "budget_krw")
         )
-
-        return {
-            "reply": clean_reply,
-            "extracted": extracted,
-            "trigger_recommend": trigger,
-        }
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+        return {"reply": clean_reply, "extracted": extracted, "trigger_recommend": trigger}
 
     def _parse_extracted(self, text: str) -> Optional[dict]:
         match = re.search(r"<extracted>\s*(.*?)\s*</extracted>", text, re.DOTALL)
@@ -127,14 +185,17 @@ class ChatEngine:
             return None
 
     def _strip_extracted_tag(self, text: str) -> str:
-        return re.sub(r"\s*<extracted>.*?</extracted>", "", text, flags=re.DOTALL).strip()
+        text = re.sub(r"\s*<extracted>.*?</extracted>", "", text, flags=re.DOTALL)
+        # Qwen3 thinking 태그 제거
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        return text.strip()
 
     def _mock_response(self) -> dict:
         return {
             "reply": (
                 "안녕하세요! 저는 Roomfit AI 인테리어 코파일럿이에요. 🏠\n\n"
-                "(현재 OPENAI_API_KEY가 설정되지 않아 데모 모드로 동작합니다)\n\n"
-                "어떤 방을 꾸미고 싶으신가요? 분위기, 용도, 예산을 알려주시면 가구를 추천해 드릴게요!"
+                "(GOOGLE_API_KEY 또는 OPENAI_API_KEY를 설정해 주세요)\n\n"
+                "어떤 방을 꾸미고 싶으신가요?"
             ),
             "extracted": None,
             "trigger_recommend": False,
