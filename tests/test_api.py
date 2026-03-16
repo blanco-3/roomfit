@@ -88,6 +88,46 @@ def test_recommendation_history_endpoint():
     assert {'run_id', 'room_id', 'total_price_krw'}.issubset(data['items'][0].keys())
 
 
+def test_auto_estimate_from_photos_and_recommendation_flow():
+    headers = auth_headers()
+
+    files = [
+        ('files', ('a.jpg', b'fakeimg1', 'image/jpeg')),
+        ('files', ('b.jpg', b'fakeimg2', 'image/jpeg')),
+    ]
+    auto = client.post('/v1/room/auto-estimate', data={
+        'reference_object': 'a4_long',
+        'mood': 'minimal_warm',
+        'purpose': 'work_sleep',
+        'budget_krw': '1300000',
+    }, files=files, headers=headers)
+    assert auto.status_code == 200
+    profile = auto.json()['room_profile']
+    assert profile['estimate_source'] == 'ai_photo_reference'
+    assert profile['estimate_confidence'] is not None
+
+    room_id = profile['room_id']
+    reviewed = client.post('/v1/room/estimate', json={
+        'room_id': room_id,
+        'width_cm': 300,
+        'length_cm': 360,
+        'height_cm': 242,
+        'mood': 'minimal_warm',
+        'purpose': 'work_sleep',
+        'budget_krw': 1300000,
+        'estimate_source': 'ai_reviewed',
+        'estimate_confidence': 0.81,
+    }, headers=headers)
+    assert reviewed.status_code == 200
+
+    rec = client.post('/v1/recommendations', json={
+        'room_id': room_id,
+        'required_categories': ['bed', 'desk', 'chair', 'storage']
+    }, headers=headers)
+    assert rec.status_code == 200
+    assert rec.json()['room_estimation']['source'] in ('ai_photo_reference', 'ai_reviewed', 'manual')
+
+
 def test_cv_job_mocked_estimation_flow():
     headers = auth_headers()
 

@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFil
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.cv_worker import mock_measurement_estimation
+from app.cv_worker import infer_room_dimensions_from_photos, mock_measurement_estimation
 from app.db import (
     authenticate_user,
     count_room_photos,
@@ -148,6 +148,87 @@ async def upload_room_photos(
     }
 
 
+@app.post("/v1/room/auto-estimate")
+async def room_auto_estimate(
+    reference_object: str = Form(...),
+    files: list[UploadFile] = File(...),
+    mood: str = Form("minimal_warm"),
+    purpose: str = Form("work_sleep"),
+    budget_krw: int = Form(1200000),
+    room_id: Optional[str] = Form(None),
+    authorization: Optional[str] = Header(None),
+):
+    user = get_current_user(authorization)
+    if len(files) < 2:
+        raise HTTPException(status_code=400, detail="at least 2 photos required")
+    if len(files) > 12:
+        raise HTTPException(status_code=400, detail="max 12 photos")
+
+    target_room_id = room_id
+    if target_room_id:
+        room = get_room(target_room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="room_id not found")
+        if room["user_id"] != user["user_id"]:
+            raise HTTPException(status_code=403, detail="forbidden")
+    else:
+        bootstrap = save_room(
+            user["user_id"],
+            {
+                "width_cm": 280,
+                "length_cm": 340,
+                "height_cm": 240,
+                "mood": mood,
+                "purpose": purpose,
+                "budget_krw": budget_krw,
+                "estimate_source": "bootstrap",
+            },
+        )
+        target_room_id = bootstrap["room_id"]
+
+    saved = []
+    for f in files:
+        content = await f.read()
+        saved.append(save_room_photo(target_room_id, f.filename or "photo.jpg", content))
+
+    estimate = infer_room_dimensions_from_photos(len(saved), reference_object)
+    room = save_room(
+        user["user_id"],
+        {
+            "room_id": target_room_id,
+            "width_cm": estimate["estimated"]["width_cm"],
+            "length_cm": estimate["estimated"]["length_cm"],
+            "height_cm": estimate["estimated"]["height_cm"],
+            "mood": mood,
+            "purpose": purpose,
+            "budget_krw": budget_krw,
+            "estimate_source": "ai_photo_reference",
+            "estimate_confidence": estimate["confidence"],
+            "estimation_notes": f"reference={reference_object}; photos={len(saved)}",
+        },
+    )
+    log_event(
+        "room.auto_estimate",
+        "room profile auto-estimated from photos",
+        context={"room_id": target_room_id, "photo_count": len(saved), "confidence": estimate["confidence"]},
+    )
+
+    return {
+        "room_profile": {
+            "room_id": room["room_id"],
+            "area_m2": room["area_m2"],
+            "width_cm": estimate["estimated"]["width_cm"],
+            "length_cm": estimate["estimated"]["length_cm"],
+            "height_cm": estimate["estimated"]["height_cm"],
+            "estimate_source": room["estimate_source"],
+            "estimate_confidence": room["estimate_confidence"],
+            "editable": True,
+            "recommended_walkway_cm": 60,
+        },
+        "photos": [{"photo_id": p["photo_id"], "original_name": p["original_name"]} for p in saved],
+    }
+
+
 @app.get("/v1/catalog")
 def get_catalog(category: Optional[str] = Query(None), max_price: Optional[int] = Query(None)):
     items = load_catalog()
@@ -167,6 +248,8 @@ def room_estimate(payload: RoomEstimateRequest, authorization: Optional[str] = H
         "room_profile": {
             "room_id": room["room_id"],
             "area_m2": room["area_m2"],
+            "estimate_source": room.get("estimate_source", payload.estimate_source),
+            "estimate_confidence": room.get("estimate_confidence", payload.estimate_confidence),
             "recommended_walkway_cm": 60,
         }
     }
@@ -184,6 +267,13 @@ def recommendations(payload: RecommendationRequest, authorization: Optional[str]
     result = recommend(room, payload.required_categories, load_catalog())
     run_id = save_recommendation(payload.room_id, result)
     result["run_id"] = run_id
+    result["room_estimation"] = {
+        "source": room.get("estimate_source", "manual"),
+        "confidence": room.get("estimate_confidence"),
+        "width_cm": room.get("width_cm"),
+        "length_cm": room.get("length_cm"),
+        "height_cm": room.get("height_cm"),
+    }
     log_event("recommendations.run", "recommendation generated", context={"room_id": payload.room_id, "run_id": run_id})
     return result
 

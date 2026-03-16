@@ -75,7 +75,11 @@ def init_db() -> None:
               purpose TEXT NOT NULL,
               budget_krw INTEGER NOT NULL,
               area_m2 REAL NOT NULL,
+              estimate_source TEXT NOT NULL DEFAULT 'manual',
+              estimate_confidence REAL,
+              estimation_notes TEXT,
               created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY(user_id) REFERENCES users(user_id)
             )
             """
@@ -135,6 +139,18 @@ def init_db() -> None:
             )
             """
         )
+
+        # lightweight migration for existing sqlite files
+        columns = {row['name'] for row in c.execute("PRAGMA table_info(room_profiles)").fetchall()}
+        if 'estimate_source' not in columns:
+            c.execute("ALTER TABLE room_profiles ADD COLUMN estimate_source TEXT NOT NULL DEFAULT 'manual'")
+        if 'estimate_confidence' not in columns:
+            c.execute("ALTER TABLE room_profiles ADD COLUMN estimate_confidence REAL")
+        if 'estimation_notes' not in columns:
+            c.execute("ALTER TABLE room_profiles ADD COLUMN estimation_notes TEXT")
+        if 'updated_at' not in columns:
+            c.execute("ALTER TABLE room_profiles ADD COLUMN updated_at TEXT")
+            c.execute("UPDATE room_profiles SET updated_at = created_at WHERE updated_at IS NULL")
 
 
 def log_event(event_type: str, message: str, *, level: str = "info", context: Optional[dict] = None) -> str:
@@ -214,28 +230,67 @@ def get_user_by_token(token: str) -> Optional[dict]:
 
 
 def save_room(user_id: str, payload: dict) -> dict:
-    room_id = str(uuid.uuid4())
+    room_id = payload.get("room_id") or str(uuid.uuid4())
     area_m2 = round((payload["width_cm"] * payload["length_cm"]) / 10000, 2)
+    estimate_source = payload.get("estimate_source", "manual")
+    estimate_confidence = payload.get("estimate_confidence")
+    estimation_notes = payload.get("estimation_notes")
 
     with conn() as c:
-        c.execute(
-            """
-            INSERT INTO room_profiles (room_id, user_id, width_cm, length_cm, height_cm, mood, purpose, budget_krw, area_m2)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                room_id,
-                user_id,
-                payload["width_cm"],
-                payload["length_cm"],
-                payload["height_cm"],
-                payload["mood"],
-                payload["purpose"],
-                payload["budget_krw"],
-                area_m2,
-            ),
-        )
-    return {"room_id": room_id, "area_m2": area_m2}
+        exists = c.execute("SELECT room_id FROM room_profiles WHERE room_id = ?", (room_id,)).fetchone()
+        if exists:
+            c.execute(
+                """
+                UPDATE room_profiles
+                SET width_cm = ?, length_cm = ?, height_cm = ?, mood = ?, purpose = ?, budget_krw = ?,
+                    area_m2 = ?, estimate_source = ?, estimate_confidence = ?, estimation_notes = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE room_id = ? AND user_id = ?
+                """,
+                (
+                    payload["width_cm"],
+                    payload["length_cm"],
+                    payload["height_cm"],
+                    payload["mood"],
+                    payload["purpose"],
+                    payload["budget_krw"],
+                    area_m2,
+                    estimate_source,
+                    estimate_confidence,
+                    estimation_notes,
+                    room_id,
+                    user_id,
+                ),
+            )
+        else:
+            c.execute(
+                """
+                INSERT INTO room_profiles
+                (room_id, user_id, width_cm, length_cm, height_cm, mood, purpose, budget_krw, area_m2,
+                 estimate_source, estimate_confidence, estimation_notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    room_id,
+                    user_id,
+                    payload["width_cm"],
+                    payload["length_cm"],
+                    payload["height_cm"],
+                    payload["mood"],
+                    payload["purpose"],
+                    payload["budget_krw"],
+                    area_m2,
+                    estimate_source,
+                    estimate_confidence,
+                    estimation_notes,
+                ),
+            )
+    return {
+        "room_id": room_id,
+        "area_m2": area_m2,
+        "estimate_source": estimate_source,
+        "estimate_confidence": estimate_confidence,
+    }
 
 
 def get_room(room_id: str) -> Optional[dict]:

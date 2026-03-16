@@ -16,12 +16,16 @@ class LoginRequest(BaseModel):
 
 
 class RoomEstimateRequest(BaseModel):
+    room_id: str | None = None
     width_cm: int = Field(..., ge=180, le=1200)
     length_cm: int = Field(..., ge=180, le=1200)
     height_cm: int = Field(240, ge=180, le=400)
     mood: str = "minimal"
     purpose: str = "work_sleep"
     budget_krw: int = Field(..., ge=100000)
+    estimate_source: str = "manual"
+    estimate_confidence: float | None = Field(None, ge=0, le=1)
+    estimation_notes: str | None = None
 
 
 class RecommendationRequest(BaseModel):
