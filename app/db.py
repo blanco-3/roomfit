@@ -5,7 +5,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -106,6 +106,7 @@ def init_db() -> None:
               style_score REAL NOT NULL,
               selected_count INTEGER NOT NULL,
               payload_json TEXT NOT NULL,
+              idempotency_key TEXT,
               created_at TEXT DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY(room_id) REFERENCES room_profiles(room_id)
             )
@@ -132,6 +133,10 @@ def init_db() -> None:
               status TEXT NOT NULL,
               result_json TEXT,
               error_text TEXT,
+              idempotency_key TEXT,
+              retry_count INTEGER NOT NULL DEFAULT 0,
+              started_at TEXT,
+              timeout_seconds INTEGER,
               created_at TEXT DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY(room_id) REFERENCES room_profiles(room_id),
@@ -151,6 +156,20 @@ def init_db() -> None:
         if 'updated_at' not in columns:
             c.execute("ALTER TABLE room_profiles ADD COLUMN updated_at TEXT")
             c.execute("UPDATE room_profiles SET updated_at = created_at WHERE updated_at IS NULL")
+
+        rec_columns = {row['name'] for row in c.execute("PRAGMA table_info(recommendation_runs)").fetchall()}
+        if 'idempotency_key' not in rec_columns:
+            c.execute("ALTER TABLE recommendation_runs ADD COLUMN idempotency_key TEXT")
+
+        cv_columns = {row['name'] for row in c.execute("PRAGMA table_info(cv_jobs)").fetchall()}
+        if 'idempotency_key' not in cv_columns:
+            c.execute("ALTER TABLE cv_jobs ADD COLUMN idempotency_key TEXT")
+        if 'retry_count' not in cv_columns:
+            c.execute("ALTER TABLE cv_jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0")
+        if 'started_at' not in cv_columns:
+            c.execute("ALTER TABLE cv_jobs ADD COLUMN started_at TEXT")
+        if 'timeout_seconds' not in cv_columns:
+            c.execute("ALTER TABLE cv_jobs ADD COLUMN timeout_seconds INTEGER")
 
 
 def log_event(event_type: str, message: str, *, level: str = "info", context: Optional[dict] = None) -> str:
@@ -305,32 +324,42 @@ def count_room_photos(room_id: str) -> int:
     return int(row["cnt"] if row else 0)
 
 
-def create_cv_job(room_id: str, user_id: str) -> str:
+def create_cv_job(
+    room_id: str,
+    user_id: str,
+    *,
+    idempotency_key: Optional[str] = None,
+    timeout_seconds: int = 90,
+) -> str:
     job_id = str(uuid.uuid4())
     with conn() as c:
         c.execute(
-            "INSERT INTO cv_jobs (job_id, room_id, user_id, status) VALUES (?, ?, ?, ?)",
-            (job_id, room_id, user_id, "queued"),
+            "INSERT INTO cv_jobs (job_id, room_id, user_id, status, idempotency_key, timeout_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+            (job_id, room_id, user_id, "queued", idempotency_key, timeout_seconds),
         )
     return job_id
 
 
 def update_cv_job(job_id: str, status: str, *, result: Optional[dict] = None, error_text: Optional[str] = None) -> None:
+    started_at = datetime.now(timezone.utc).isoformat() if status == "running" else None
     with conn() as c:
         c.execute(
             """
             UPDATE cv_jobs
-            SET status = ?, result_json = ?, error_text = ?, updated_at = CURRENT_TIMESTAMP
+            SET status = ?, result_json = ?, error_text = ?,
+                started_at = COALESCE(?, started_at),
+                retry_count = CASE WHEN ? = 'running' THEN retry_count + 1 ELSE retry_count END,
+                updated_at = CURRENT_TIMESTAMP
             WHERE job_id = ?
             """,
-            (status, json.dumps(result, ensure_ascii=False) if result else None, error_text, job_id),
+            (status, json.dumps(result, ensure_ascii=False) if result else None, error_text, started_at, status, job_id),
         )
 
 
 def get_cv_job(job_id: str) -> Optional[dict]:
     with conn() as c:
         row = c.execute(
-            "SELECT job_id, room_id, user_id, status, result_json, error_text, created_at, updated_at FROM cv_jobs WHERE job_id = ?",
+            "SELECT job_id, room_id, user_id, status, result_json, error_text, idempotency_key, retry_count, started_at, timeout_seconds, created_at, updated_at FROM cv_jobs WHERE job_id = ?",
             (job_id,),
         ).fetchone()
     if not row:
@@ -345,6 +374,51 @@ def get_cv_job(job_id: str) -> Optional[dict]:
         item["result"] = None
     item.pop("result_json", None)
     return item
+
+
+def find_reusable_cv_job(room_id: str, user_id: str, idempotency_key: Optional[str]) -> Optional[dict]:
+    if not idempotency_key:
+        return None
+    with conn() as c:
+        row = c.execute(
+            """
+            SELECT job_id FROM cv_jobs
+            WHERE room_id = ? AND user_id = ? AND idempotency_key = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (room_id, user_id, idempotency_key),
+        ).fetchone()
+    if not row:
+        return None
+    return get_cv_job(row["job_id"])
+
+
+def mark_stale_cv_jobs_as_timed_out(timeout_seconds: int = 90) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(1, timeout_seconds))
+    with conn() as c:
+        rows = c.execute(
+            "SELECT job_id, started_at FROM cv_jobs WHERE status = 'running'"
+        ).fetchall()
+        stale_ids = []
+        for row in rows:
+            started_at = row["started_at"]
+            if not started_at:
+                continue
+            try:
+                started_dt = datetime.fromisoformat(started_at)
+            except ValueError:
+                continue
+            if started_dt <= cutoff:
+                stale_ids.append(row["job_id"])
+
+        for job_id in stale_ids:
+            c.execute(
+                "UPDATE cv_jobs SET status = 'failed', error_text = 'timeout', updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+                (job_id,),
+            )
+
+    return len(stale_ids)
 
 
 def save_room_photo(room_id: str, original_name: str, file_bytes: bytes) -> dict:
@@ -366,15 +440,15 @@ def save_room_photo(room_id: str, original_name: str, file_bytes: bytes) -> dict
     return {"photo_id": photo_id, "file_path": str(file_path), "original_name": original_name}
 
 
-def save_recommendation(room_id: str, result: dict) -> str:
+def save_recommendation(room_id: str, result: dict, *, idempotency_key: Optional[str] = None) -> str:
     run_id = str(uuid.uuid4())
     summary = result["summary"]
     with conn() as c:
         c.execute(
             """
             INSERT INTO recommendation_runs
-            (run_id, room_id, total_price_krw, fit_score, style_score, selected_count, payload_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (run_id, room_id, total_price_krw, fit_score, style_score, selected_count, payload_json, idempotency_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -384,9 +458,31 @@ def save_recommendation(room_id: str, result: dict) -> str:
                 summary["style_score"],
                 summary["selected_count"],
                 json.dumps(result, ensure_ascii=False),
+                idempotency_key,
             ),
         )
     return run_id
+
+
+def find_recommendation_by_key(room_id: str, idempotency_key: Optional[str]) -> Optional[dict]:
+    if not idempotency_key:
+        return None
+    with conn() as c:
+        row = c.execute(
+            """
+            SELECT run_id, payload_json
+            FROM recommendation_runs
+            WHERE room_id = ? AND idempotency_key = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (room_id, idempotency_key),
+        ).fetchone()
+    if not row:
+        return None
+    payload = json.loads(row["payload_json"])
+    payload["run_id"] = row["run_id"]
+    return payload
 
 
 def list_recommendation_runs(user_id: str, limit: int = 20) -> list[dict]:

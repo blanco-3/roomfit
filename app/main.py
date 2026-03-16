@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +16,8 @@ from app.db import (
     create_cv_job,
     create_token,
     create_user,
+    find_recommendation_by_key,
+    find_reusable_cv_job,
     get_cv_job,
     get_room,
     get_user_by_token,
@@ -23,6 +26,7 @@ from app.db import (
     list_recommendation_runs,
     load_catalog,
     log_event,
+    mark_stale_cv_jobs_as_timed_out,
     save_recommendation,
     save_room,
     save_room_photo,
@@ -44,12 +48,39 @@ app = FastAPI(title="AI Room Styler", version="0.5.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), name="static")
 
 
+def is_dev_mode() -> bool:
+    return os.getenv("DEV_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_or_create_dev_user() -> dict:
+    email = os.getenv("DEV_MODE_EMAIL", "dev@roomfit.ai")
+    password = os.getenv("DEV_MODE_PASSWORD", "devpass1234")
+    display_name = os.getenv("DEV_MODE_NAME", "Developer")
+
+    user = authenticate_user(email, password)
+    if user:
+        return user
+
+    try:
+        return create_user(email, password, display_name)
+    except Exception:
+        # already exists with different state; fallback to login path if possible
+        user = authenticate_user(email, password)
+        if user:
+            return user
+        raise HTTPException(status_code=500, detail="Failed to bootstrap dev-mode user")
+
+
 def get_current_user(authorization: Optional[str]) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
+        if is_dev_mode():
+            return get_or_create_dev_user()
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
     user = get_user_by_token(token)
     if not user:
+        if is_dev_mode():
+            return get_or_create_dev_user()
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
 
@@ -97,6 +128,15 @@ def me(authorization: Optional[str] = Header(None)):
     return {"user": user}
 
 
+@app.post("/v1/dev/session")
+def dev_session():
+    if not is_dev_mode():
+        raise HTTPException(status_code=404, detail="not found")
+    user = get_or_create_dev_user()
+    token = create_token(user["user_id"])
+    return {"token": token, "user": user, "dev_mode": True}
+
+
 @app.get("/v1/scan-guidelines")
 def scan_guidelines():
     return {
@@ -112,6 +152,18 @@ def scan_guidelines():
             "0.5x 광각 가능하면 사용",
             "모션블러 없는 고정 촬영",
             "가급적 기준 물체(A4/문/침대) 포함",
+        ],
+        "reference_objects": [
+            {"value": "a4_long", "label": "A4 긴 변 (29.7cm)", "best_for": "책상/바닥 근거리"},
+            {"value": "credit_card", "label": "신용카드 (8.6cm)", "best_for": "근거리"},
+            {"value": "door_single", "label": "싱글 도어 (90cm)", "best_for": "원거리"},
+            {"value": "desk_standard", "label": "120cm 책상", "best_for": "벽면 정렬"},
+            {"value": "single_bed", "label": "싱글 침대 (100cm)", "best_for": "침실"},
+        ],
+        "low_confidence_recapture": [
+            "기준 물체가 프레임 중앙에 오게 1장 추가",
+            "방 반대편에서 같은 높이로 1장 추가",
+            "바닥-벽 경계선이 수평으로 보이게 재촬영",
         ],
     }
 
@@ -222,6 +274,12 @@ async def room_auto_estimate(
             "height_cm": estimate["estimated"]["height_cm"],
             "estimate_source": room["estimate_source"],
             "estimate_confidence": room["estimate_confidence"],
+            "needs_manual_review": estimate.get("needs_manual_review", False),
+            "recapture_guidance": [
+                "기준 물체가 중앙에 보이게 1장 추가",
+                "반대 방향(180도)에서 1장 추가",
+                "바닥-벽 경계가 선명한 사진 추가",
+            ] if estimate.get("needs_manual_review", False) else [],
             "editable": True,
             "recommended_walkway_cm": 60,
         },
@@ -256,7 +314,11 @@ def room_estimate(payload: RoomEstimateRequest, authorization: Optional[str] = H
 
 
 @app.post("/v1/recommendations")
-def recommendations(payload: RecommendationRequest, authorization: Optional[str] = Header(None)):
+def recommendations(
+    payload: RecommendationRequest,
+    authorization: Optional[str] = Header(None),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+):
     user = get_current_user(authorization)
     room = get_room(payload.room_id)
     if not room:
@@ -264,8 +326,19 @@ def recommendations(payload: RecommendationRequest, authorization: Optional[str]
     if room["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="forbidden")
 
+    cached = find_recommendation_by_key(payload.room_id, idempotency_key)
+    if cached:
+        cached["room_estimation"] = {
+            "source": room.get("estimate_source", "manual"),
+            "confidence": room.get("estimate_confidence"),
+            "width_cm": room.get("width_cm"),
+            "length_cm": room.get("length_cm"),
+            "height_cm": room.get("height_cm"),
+        }
+        return cached
+
     result = recommend(room, payload.required_categories, load_catalog())
-    run_id = save_recommendation(payload.room_id, result)
+    run_id = save_recommendation(payload.room_id, result, idempotency_key=idempotency_key)
     result["run_id"] = run_id
     result["room_estimation"] = {
         "source": room.get("estimate_source", "manual"),
@@ -286,7 +359,12 @@ def recommendation_history(limit: int = Query(20, ge=1, le=100), authorization: 
 
 
 @app.post("/v1/cv/jobs")
-def create_room_cv_job(room_id: str = Query(...), authorization: Optional[str] = Header(None)):
+def create_room_cv_job(
+    room_id: str = Query(...),
+    timeout_seconds: int = Query(90, ge=10, le=600),
+    authorization: Optional[str] = Header(None),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+):
     user = get_current_user(authorization)
     room = get_room(room_id)
     if not room:
@@ -298,7 +376,17 @@ def create_room_cv_job(room_id: str = Query(...), authorization: Optional[str] =
     if photo_count < 2:
         raise HTTPException(status_code=400, detail="at least 2 uploaded photos required before CV job")
 
-    job_id = create_cv_job(room_id=room_id, user_id=user["user_id"])
+    mark_stale_cv_jobs_as_timed_out(timeout_seconds=timeout_seconds)
+    reusable = find_reusable_cv_job(room_id, user["user_id"], idempotency_key)
+    if reusable and reusable["status"] in ("queued", "running", "completed"):
+        return {"job": reusable, "idempotent_reused": True}
+
+    job_id = create_cv_job(
+        room_id=room_id,
+        user_id=user["user_id"],
+        idempotency_key=idempotency_key,
+        timeout_seconds=timeout_seconds,
+    )
     log_event("cv.job.queued", "cv estimation job queued", context={"job_id": job_id, "room_id": room_id})
 
     try:
@@ -311,7 +399,7 @@ def create_room_cv_job(room_id: str = Query(...), authorization: Optional[str] =
         log_event("cv.job.failed", "cv estimation job failed", level="error", context={"job_id": job_id, "error": str(e)})
 
     item = get_cv_job(job_id)
-    return {"job": item}
+    return {"job": item, "idempotent_reused": False}
 
 
 @app.get("/v1/cv/jobs/{job_id}")
