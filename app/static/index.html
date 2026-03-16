@@ -6,6 +6,7 @@
   <title>Roomfit — AI 인테리어 코파일럿</title>
   <meta name="theme-color" content="#0d0f1c" />
   <link rel="manifest" href="/static/manifest.json" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,8 +80,12 @@
     }
 
     /* ── Auth screen ── */
+    #bgCanvas {
+      position: fixed; inset: 0; z-index: 1;
+      width: 100%; height: 100%; pointer-events: none; display: block;
+    }
     #authScreen {
-      position: relative; z-index: 1;
+      position: relative; z-index: 2;
       display: flex; align-items: center; justify-content: center;
       min-height: 100vh; padding: 24px;
     }
@@ -536,6 +541,7 @@
   </style>
 </head>
 <body>
+<canvas id="bgCanvas"></canvas>
 
 <!-- ══ Auth Screen ══ -->
 <div id="authScreen">
@@ -655,12 +661,14 @@ function logout() {
   document.getElementById('authScreen').classList.remove('hidden');
   document.getElementById('messages').innerHTML = '';
   document.getElementById('photoPreview').innerHTML = '';
+  if (window._threeStart) window._threeStart();
 }
 
 // ── UI helpers ──
 function showChat() {
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('chatScreen').classList.add('active');
+  if (window._threeStop) window._threeStop();
   // 유저 이름 표시 시도
   api('/v1/me', 'GET').then(r => {
     document.getElementById('chatUserName').textContent = r.user?.display_name || '';
@@ -944,6 +952,175 @@ function mdToHtml(text) {
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/^• (.+)$/gm, '<span style="display:block;padding-left:12px">• $1</span>');
 }
+
+// ══════════════════════════════════════════════════
+// THREE.JS 3D AUTH BACKGROUND
+// ══════════════════════════════════════════════════
+(function () {
+  const canvas = document.getElementById('bgCanvas');
+
+  // WebGL 지원 체크
+  function webglSupported() {
+    try {
+      return !!(window.WebGLRenderingContext &&
+        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+    } catch (e) { return false; }
+  }
+  if (!webglSupported() || typeof THREE === 'undefined') return;
+
+  // ── 상태 ──
+  let renderer, scene, camera, animId, resizeHandler;
+  const BG = 0x0a0e27;
+  const C1 = 0x38bdf8;
+  const C2 = 0x818cf8;
+  const C3 = 0x6ee7f7;
+
+  // ── 엣지 와이어프레임 헬퍼 ──
+  function edgeLines(geo, color, opacity) {
+    const edges = new THREE.EdgesGeometry(geo);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+    return new THREE.LineSegments(edges, mat);
+  }
+
+  // ── 씬 구성 ──
+  function buildScene() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(BG);
+    scene.fog = new THREE.Fog(BG, 5, 15);
+
+    // 조명
+    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const pl1 = new THREE.PointLight(C1, 1.6, 12);
+    pl1.position.set(2.5, 3, 2);
+    scene.add(pl1);
+    const pl2 = new THREE.PointLight(C2, 0.9, 8);
+    pl2.position.set(-2, 1.5, -2);
+    scene.add(pl2);
+
+    // ── 방 박스 와이어프레임 ──
+    const roomLines = edgeLines(new THREE.BoxGeometry(4, 2.6, 4), C1, 0.16);
+    scene.add(roomLines);
+
+    // ── 침대 ──
+    const bed = edgeLines(new THREE.BoxGeometry(1.4, 0.32, 2.1), C1, 0.50);
+    bed.position.set(-1.05, -0.94, 0.55);
+    scene.add(bed);
+    // 헤드보드
+    const hb = edgeLines(new THREE.BoxGeometry(1.4, 0.58, 0.07), C1, 0.38);
+    hb.position.set(-1.05, -0.61, 1.52);
+    scene.add(hb);
+    // 침대 다리 4개
+    [[-0.62, 0.88], [0.62, 0.88], [-0.62, -0.88], [0.62, -0.88]].forEach(([dx, dz]) => {
+      const leg = edgeLines(new THREE.BoxGeometry(0.09, 0.18, 0.09), C1, 0.28);
+      leg.position.set(-1.05 + dx, -1.19, 0.55 + dz);
+      scene.add(leg);
+    });
+
+    // ── 책상 ──
+    const desk = edgeLines(new THREE.BoxGeometry(1.3, 0.05, 0.62), C2, 0.52);
+    desk.position.set(0.85, -0.32, -1.52);
+    scene.add(desk);
+    // 책상 다리
+    [[-0.58, -0.26], [0.58, -0.26], [-0.58, 0.26], [0.58, 0.26]].forEach(([dx, dz]) => {
+      const leg = edgeLines(new THREE.BoxGeometry(0.05, 0.62, 0.05), C2, 0.28);
+      leg.position.set(0.85 + dx, -0.655, -1.52 + dz);
+      scene.add(leg);
+    });
+    // 모니터
+    const mon = edgeLines(new THREE.BoxGeometry(0.55, 0.35, 0.04), C3, 0.42);
+    mon.position.set(0.85, -0.07, -1.76);
+    scene.add(mon);
+
+    // ── 의자 ──
+    const cSeat = edgeLines(new THREE.BoxGeometry(0.46, 0.05, 0.46), C3, 0.50);
+    cSeat.position.set(0.80, -0.57, -0.58);
+    scene.add(cSeat);
+    const cBack = edgeLines(new THREE.BoxGeometry(0.46, 0.52, 0.05), C3, 0.42);
+    cBack.position.set(0.80, -0.27, -0.80);
+    scene.add(cBack);
+    // 의자 다리
+    [[-0.20, -0.20], [0.20, -0.20], [-0.20, 0.20], [0.20, 0.20]].forEach(([dx, dz]) => {
+      const leg = edgeLines(new THREE.BoxGeometry(0.04, 0.38, 0.04), C3, 0.25);
+      leg.position.set(0.80 + dx, -0.775, -0.58 + dz);
+      scene.add(leg);
+    });
+
+    // ── 수납 선반 ──
+    const shelf = edgeLines(new THREE.BoxGeometry(0.82, 1.55, 0.30), C2, 0.40);
+    shelf.position.set(-1.62, 0.02, -1.68);
+    scene.add(shelf);
+    // 선반 칸막이 3개
+    [-0.42, 0.10, 0.55].forEach(y => {
+      const div = edgeLines(new THREE.BoxGeometry(0.82, 0.03, 0.30), C2, 0.24);
+      div.position.set(-1.62, y, -1.68);
+      scene.add(div);
+    });
+  }
+
+  // ── 렌더러 초기화 ──
+  function initRenderer() {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(BG, 1);
+  }
+
+  // ── 카메라 초기화 ──
+  function initCamera() {
+    camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 50);
+    camera.position.set(0, 2.2, 5.5);
+    camera.lookAt(0, 0, 0);
+  }
+
+  // ── 애니메이션 루프 ──
+  let angle = 0;
+  function animate() {
+    animId = requestAnimationFrame(animate);
+    angle += 0.0008;
+    camera.position.x = Math.sin(angle) * 5.5;
+    camera.position.z = Math.cos(angle) * 5.5;
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+  }
+
+  // ── 리사이즈 ──
+  function onResize() {
+    if (!camera || !renderer) return;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // ── PUBLIC: 시작 ──
+  window._threeStart = function () {
+    if (animId) return; // 이미 실행 중
+    canvas.style.display = 'block';
+    if (!renderer) {
+      initRenderer();
+      buildScene();
+      initCamera();
+    }
+    resizeHandler = onResize;
+    window.addEventListener('resize', resizeHandler);
+    animate();
+  };
+
+  // ── PUBLIC: 정지 + dispose ──
+  window._threeStop = function () {
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
+    if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
+    if (renderer) { renderer.dispose(); renderer = null; }
+    scene = null; camera = null;
+    canvas.style.display = 'none';
+  };
+
+  // 페이지 로드 시 토큰 없으면 (=로그인 화면) 즉시 시작
+  if (!localStorage.getItem('rf_token')) {
+    window._threeStart();
+  } else {
+    canvas.style.display = 'none'; // 토큰 있으면 바로 채팅 전환되므로 숨김
+  }
+})();
 </script>
 </body>
 </html>
