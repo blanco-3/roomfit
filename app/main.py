@@ -485,6 +485,10 @@ async def chat(
         pref_colors: list[str] = extracted.get("pref_colors", [])
         pref_materials: list[str] = extracted.get("pref_materials", [])
         recommendation = recommend(full_room, categories, load_catalog(), pref_colors, pref_materials)
+        recommendation["room_dims"] = {
+            "width_cm": int(full_room["width_cm"]),
+            "length_cm": int(full_room["length_cm"]),
+        }
         save_recommendation(room_id, recommendation)
         log_event(
             "chat.recommend",

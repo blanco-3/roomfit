@@ -573,6 +573,25 @@
 
     .hidden { display: none !important; }
 
+    /* ── Isometric floor plan ── */
+    .rec-floorplan-wrap {
+      margin-bottom: 18px; height: 200px; border-radius: 12px; overflow: hidden;
+      position: relative;
+      background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08);
+    }
+    .rec-floorplan-wrap canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    .rec-floorplan-lbl {
+      position: absolute; top: 8px; right: 10px; font-size: 10px; font-weight: 600;
+      color: var(--text-3); pointer-events: none; letter-spacing: 0.6px; text-transform: uppercase;
+    }
+    @media (min-width: 600px) { .rec-floorplan-wrap { height: 280px; } }
+    .rec-pcard.fp-active {
+      border-color: rgba(56,189,248,.6) !important;
+      box-shadow: 0 0 0 2px rgba(56,189,248,.25), 0 12px 32px rgba(0,0,0,.5) !important;
+      transform: scale(1.04) translateY(-4px) !important;
+      transition: all 0.15s ease !important;
+    }
+
     @media (max-width: 480px) {
       .rec-summary { grid-template-columns: repeat(2, 1fr); }
       .bubble { max-width: 88%; }
@@ -734,6 +753,7 @@ function addAiMsg(text, recData = null) {
   div.innerHTML = `<div class="avatar">RF</div><div class="bubble">${mdToHtml(text)}${recData ? renderRec(recData) : ''}</div>`;
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
+  if (recData) { const _id = 'fp' + _fpN; requestAnimationFrame(() => fpInit(_id, recData)); }
   return div;
 }
 
@@ -877,6 +897,9 @@ function removePhoto(idx) {
   renderPhotoPreview();
 }
 
+// ── Floor plan canvas counter ──
+let _fpN = 0;
+
 // ── Category icon map ──
 const CAT_ICONS = { bed:'🛏', desk:'🪑', chair:'💺', storage:'🗄', sofa:'🛋', table:'🪵' };
 
@@ -926,7 +949,7 @@ function renderRec(rec) {
         : '';
 
       return `
-        <div class="rec-pcard${isTop ? '' : ' alt'}">
+        <div class="rec-pcard${isTop ? '' : ' alt'}" data-cat="${item.category}" data-rank="${idx+1}">
           <div class="rec-pcard-img-wrap">
             ${rankBadge}${srcBadge}
             ${imgInner}
@@ -949,6 +972,7 @@ function renderRec(rec) {
       </div>`;
   }).join('');
 
+  const fpId = 'fp' + (++_fpN);
   return `
     <div class="rec-card">
       <h4>🛋 AI 추천 가구 — ${catCount}개 카테고리</h4>
@@ -957,6 +981,7 @@ function renderRec(rec) {
         <div class="rec-stat"><div class="val">${usage}%</div><div class="lbl">예산 사용률</div></div>
         <div class="rec-stat"><div class="val">${remaining}원</div><div class="lbl">잔여 예산</div></div>
       </div>
+      <div class="rec-floorplan-wrap"><canvas id="${fpId}"></canvas><div class="rec-floorplan-lbl">평면도 Plan</div></div>
       ${groupsHtml}
     </div>`;
 }
@@ -992,6 +1017,187 @@ function mdToHtml(text) {
   return escHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/^• (.+)$/gm, '<span style="display:block;padding-left:12px">• $1</span>');
+}
+
+// ══════════════════════════════════════════════════
+// ISOMETRIC FLOOR PLAN — 2D canvas, no deps
+// ══════════════════════════════════════════════════
+const FP_RGB = {
+  bed:[56,189,248], desk:[129,140,248], chair:[52,211,153],
+  storage:[251,146,60], sofa:[192,132,252], table:[110,231,183],
+};
+const FP_ZONES = {
+  bed:{fx:.04,fy:.04}, sofa:{fx:.04,fy:.58},
+  desk:{fx:.56,fy:.04}, chair:{fx:.60,fy:.32},
+  storage:{fx:.84,fy:.04}, table:{fx:.26,fy:.62},
+};
+
+// World → screen (wx,wy in cm; wz in px)
+function fpIso(wx,wy,wz,o,s){
+  return {x:o.x+(wx-wy)*.866*s, y:o.y+(wx+wy)*.5*s-wz};
+}
+
+// Compute origin & scale to fit canvas
+function fpLayout(cw,ch,dpr,rW,rD){
+  const pad=14*dpr, wallH=26*dpr;
+  const scale=Math.min((cw-pad*2)/((rW+rD)*.866), (ch-pad*2-wallH)/((rW+rD)*.5));
+  return {o:{x:pad+rD*.866*scale, y:wallH+pad}, scale, wallH};
+}
+
+function fpPoly(ctx,pts){
+  ctx.beginPath();
+  pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+  ctx.closePath();
+}
+
+// Ray-cast point-in-polygon
+function fpHit(pts,px,py){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    if(((pts[i].y>py)!==(pts[j].y>py))&&
+       px<(pts[j].x-pts[i].x)*(py-pts[i].y)/(pts[j].y-pts[i].y)+pts[i].x)
+      inside=!inside;
+  }
+  return inside;
+}
+
+function fpFloor(ctx,rW,rD,o,s,dpr){
+  const p=(x,y)=>fpIso(x,y,0,o,s);
+  fpPoly(ctx,[p(0,0),p(rW,0),p(rW,rD),p(0,rD)]);
+  ctx.fillStyle='rgba(255,255,255,.03)'; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.20)'; ctx.lineWidth=1.2*dpr; ctx.stroke();
+  // 100 cm grid
+  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=.5*dpr;
+  for(let x=100;x<rW;x+=100){const a=p(x,0),b=p(x,rD);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  for(let y=100;y<rD;y+=100){const a=p(0,y),b=p(rW,y);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  // 60 cm walkway dashes
+  const ww=60;
+  if(rW>ww*2+40&&rD>ww*2+40){
+    ctx.setLineDash([4*dpr,4*dpr]); ctx.strokeStyle='rgba(255,255,255,.13)'; ctx.lineWidth=.8*dpr;
+    fpPoly(ctx,[p(ww,ww),p(rW-ww,ww),p(rW-ww,rD-ww),p(ww,rD-ww)]);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+function fpWalls(ctx,rW,rD,wallH,o,s){
+  const p=(x,y,z)=>fpIso(x,y,z,o,s);
+  fpPoly(ctx,[p(0,0,0),p(rW,0,0),p(rW,0,wallH),p(0,0,wallH)]);
+  ctx.fillStyle='rgba(255,255,255,.055)'; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.13)'; ctx.lineWidth=.7; ctx.stroke();
+  fpPoly(ctx,[p(0,0,0),p(0,rD,0),p(0,rD,wallH),p(0,0,wallH)]);
+  ctx.fillStyle='rgba(255,255,255,.03)'; ctx.fill(); ctx.stroke();
+}
+
+function fpBlock(ctx,bx,by,bw,bd,bh,rgb,lit,o,s){
+  const p=(x,y,z)=>fpIso(x,y,z,o,s);
+  const [r,g,b_]=rgb; const al=lit?1:.82;
+  // shadow
+  ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=6; ctx.shadowOffsetX=2; ctx.shadowOffsetY=3;
+  // left face (y=by)
+  fpPoly(ctx,[p(bx,by,0),p(bx+bw,by,0),p(bx+bw,by,bh),p(bx,by,bh)]);
+  ctx.fillStyle=`rgba(${r*.58|0},${g*.58|0},${b_*.58|0},${al})`; ctx.fill();
+  // right face (x=bx+bw)
+  fpPoly(ctx,[p(bx+bw,by,0),p(bx+bw,by+bd,0),p(bx+bw,by+bd,bh),p(bx+bw,by,bh)]);
+  ctx.fillStyle=`rgba(${r*.76|0},${g*.76|0},${b_*.76|0},${al})`; ctx.fill();
+  ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetX=0; ctx.shadowOffsetY=0;
+  // top face (brightest)
+  const top=[p(bx,by,bh),p(bx+bw,by,bh),p(bx+bw,by+bd,bh),p(bx,by+bd,bh)];
+  fpPoly(ctx,top);
+  ctx.fillStyle=lit?`rgba(${r},${g},${b_},1)`:`rgba(${r},${g},${b_},${al})`; ctx.fill();
+  ctx.strokeStyle=lit?'rgba(255,255,255,.85)':'rgba(255,255,255,.28)';
+  ctx.lineWidth=lit?1.8:.5; ctx.stroke();
+  return top;
+}
+
+function fpLabel(ctx,text,bx,by,bw,bd,bh,o,s,dpr){
+  const c=fpIso(bx+bw/2,by+bd/2,bh+6*dpr,o,s);
+  ctx.save();
+  ctx.font=`${Math.max(9,10*dpr)}px Inter,sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  ctx.shadowColor='rgba(0,0,0,.95)'; ctx.shadowBlur=4*dpr;
+  ctx.fillStyle='rgba(255,255,255,.92)';
+  ctx.fillText(text.slice(0,5),c.x,c.y);
+  ctx.restore();
+}
+
+function fpRedraw(canvas,rW,rD,blocks,litIdx){
+  const wrap=canvas.parentElement;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const cw=wrap.clientWidth*dpr, ch=wrap.clientHeight*dpr;
+  if(cw<4||ch<4) return {hitPolys:[],dpr};
+  canvas.width=cw; canvas.height=ch;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,cw,ch);
+  const {o,scale,wallH}=fpLayout(cw,ch,dpr,rW,rD);
+  const bh=9*dpr;
+  fpFloor(ctx,rW,rD,o,scale,dpr);
+  fpWalls(ctx,rW,rD,wallH,o,scale);
+  const hitPolys=blocks.map((bl,i)=>{
+    const top=fpBlock(ctx,bl.bx,bl.by,bl.bw,bl.bd,bh,bl.rgb,i===litIdx,o,scale);
+    fpLabel(ctx,bl.lbl,bl.bx,bl.by,bl.bw,bl.bd,bh,o,scale,dpr);
+    return top;
+  });
+  return {hitPolys,dpr};
+}
+
+function fpInit(fpId,rec){
+  const canvas=document.getElementById(fpId);
+  if(!canvas) return;
+  const rW=(rec.room_dims&&rec.room_dims.width_cm)||280;
+  const rD=(rec.room_dims&&rec.room_dims.length_cm)||340;
+  const topItems=(rec.items||[]).filter(i=>i.rank===1);
+  const blocks=topItems.map(item=>{
+    const z=FP_ZONES[item.category]||{fx:.35,fy:.35};
+    const d=item.dimensions_cm||{};
+    const bw=Math.min(d.width||80,rW*.5);
+    const bd=Math.min(d.depth||60,rD*.5);
+    return {
+      category:item.category,
+      lbl:CAT_LABELS[item.category]||item.category,
+      bx:Math.max(2,Math.min(z.fx*rW,rW-bw-2)),
+      by:Math.max(2,Math.min(z.fy*rD,rD-bd-2)),
+      bw,bd,rgb:FP_RGB[item.category]||[160,160,200],
+    };
+  });
+
+  let litIdx=-1;
+  let hs=fpRedraw(canvas,rW,rD,blocks,litIdx);
+
+  function setLit(idx){
+    if(idx===litIdx) return;
+    litIdx=idx;
+    hs=fpRedraw(canvas,rW,rD,blocks,litIdx);
+    const rc=canvas.closest('.rec-card');
+    if(!rc) return;
+    rc.querySelectorAll('.rec-pcard').forEach(el=>el.classList.remove('fp-active'));
+    if(idx>=0){
+      const card=rc.querySelector(`.rec-pcard[data-cat="${blocks[idx].category}"][data-rank="1"]`);
+      if(card){card.classList.add('fp-active');card.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});}
+    }
+  }
+
+  canvas.addEventListener('mousemove',e=>{
+    const r=canvas.getBoundingClientRect();
+    const px=(e.clientX-r.left)*hs.dpr, py=(e.clientY-r.top)*hs.dpr;
+    let hit=-1;
+    hs.hitPolys.forEach((poly,i)=>{if(fpHit(poly,px,py)) hit=i;});
+    setLit(hit);
+  });
+  canvas.addEventListener('mouseleave',()=>setLit(-1));
+
+  // rec-pcard hover → light up canvas block
+  const rc=canvas.closest('.rec-card');
+  if(rc){
+    rc.querySelectorAll('.rec-pcard[data-rank="1"]').forEach(pcard=>{
+      const idx=blocks.findIndex(b=>b.category===pcard.dataset.cat);
+      if(idx<0) return;
+      pcard.addEventListener('mouseenter',()=>{litIdx=idx;hs=fpRedraw(canvas,rW,rD,blocks,litIdx);});
+      pcard.addEventListener('mouseleave',()=>{litIdx=-1;hs=fpRedraw(canvas,rW,rD,blocks,litIdx);});
+    });
+  }
+
+  // Resize observer
+  new ResizeObserver(()=>{hs=fpRedraw(canvas,rW,rD,blocks,litIdx);}).observe(canvas.parentElement);
 }
 
 // ══════════════════════════════════════════════════
