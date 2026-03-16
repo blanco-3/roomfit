@@ -258,6 +258,8 @@
         var(--sh-md),
         0 0 0 1px rgba(255,255,255,.03) inset;
     }
+    /* 추천 카드 포함 버블은 더 넓게 */
+    .msg.ai .bubble:has(.rec-card) { max-width: 92%; }
     .msg.user .bubble {
       background: var(--grad);
       border-bottom-right-radius: 5px;
@@ -283,7 +285,7 @@
       backdrop-filter: blur(28px) saturate(1.6);
       -webkit-backdrop-filter: blur(28px) saturate(1.6);
       border-radius: 18px;
-      padding: 18px; margin-top: 12px;
+      padding: 14px; margin-top: 12px;
       box-shadow:
         var(--sh-md),
         0 0 40px rgba(56,189,248,.06),
@@ -318,7 +320,7 @@
     .rec-group-label {
       display: flex; align-items: center; gap: 6px;
       font-size: 11px; font-weight: 700; color: var(--text-2);
-      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
     }
     .rec-group-label span { color: var(--text-3); font-weight: 400; }
 
@@ -335,6 +337,7 @@
     /* Individual product card — stagger via :nth-child */
     .rec-pcard {
       flex: 0 0 162px;
+      display: flex; flex-direction: column;
       background: rgba(255,255,255,0.045);
       border: 1px solid rgba(255,255,255,.09);
       border-radius: 14px; overflow: hidden;
@@ -345,6 +348,7 @@
       /* entrance animation — common */
       animation: card-pop 0.4s cubic-bezier(.22,1,.36,1) both;
     }
+    @media (min-width: 600px) { .rec-pcard { flex: 0 0 200px; } }
     /* stagger delays */
     .rec-pcard:nth-child(1) { animation-delay: 0.05s; }
     .rec-pcard:nth-child(2) { animation-delay: 0.13s; }
@@ -355,7 +359,7 @@
     }
 
     .rec-pcard:hover {
-      border-color: rgba(56,189,248,.35);
+      border-color: rgba(56,189,248,.30);
       box-shadow: 0 20px 48px rgba(0,0,0,.65), 0 0 22px rgba(56,189,248,.18),
                   0 0 0 1px rgba(56,189,248,.06) inset;
     }
@@ -402,8 +406,9 @@
     }
 
     .rec-pcard-img-wrap {
-      width: 100%; height: 120px; overflow: hidden;
+      width: 100%; height: 140px; overflow: hidden;
       background: rgba(255,255,255,.04); position: relative;
+      display: flex; align-items: center; justify-content: center;
     }
     .rec-pcard-img-wrap img {
       width: 100%; height: 100%; object-fit: cover;
@@ -412,38 +417,38 @@
     .rec-pcard:hover .rec-pcard-img-wrap img { transform: scale(1.08); }
     .rec-pcard-img-ph {
       width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center; font-size: 32px;
+      display: flex; align-items: center; justify-content: center; font-size: 40px;
+      background: var(--glass-hi);
       transition: transform 0.3s ease, text-shadow 0.3s;
     }
 
-    .rec-pcard-body { padding: 10px 10px 8px; }
+    .rec-pcard-body { padding: 8px 6px; flex: 1; }
     .rec-pcard .pname {
       font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.35;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-      min-height: 32px;
     }
     .rec-pcard .pdesc {
       font-size: 10px; color: var(--text-3); margin-top: 3px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .rec-pcard-footer {
-      padding: 0 10px 10px;
+      padding: 0 8px 8px;
       display: flex; align-items: center; justify-content: space-between; gap: 6px;
     }
     .rec-pcard .pprice {
-      font-size: 13px; font-weight: 700;
+      font-size: 14px; font-weight: 700;
       background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .rec-pcard .pbuy {
       font-size: 10px; font-weight: 700; color: #fff;
-      background: var(--grad); padding: 4px 9px; border-radius: 6px;
+      background: var(--grad); padding: 5px 10px; border-radius: 6px;
       text-decoration: none;
       box-shadow: 0 2px 8px rgba(56,189,248,.25);
       transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
       flex-shrink: 0;
     }
     .rec-pcard .pbuy:hover {
-      transform: scale(1.04);
+      transform: scale(1.05);
       box-shadow: 0 4px 14px rgba(56,189,248,.45);
     }
 
@@ -1013,6 +1018,10 @@ function escHtml(s) {
 }
 
 function mdToHtml(text) {
+  // Qwen3 <think>...</think> 블록 제거 (닫힘 태그 없는 경우도 처리)
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  text = text.replace(/<think>[\s\S]*/gi, '');
+  text = text.trim();
   // 간단한 마크다운 처리 (bold, bullet)
   return escHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
