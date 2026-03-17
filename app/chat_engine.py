@@ -130,7 +130,7 @@ class ChatEngine:
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=1024,
+                max_tokens=2048,
             )
             raw_reply = response.choices[0].message.content or ""
         except Exception as exc:
