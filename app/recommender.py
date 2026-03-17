@@ -2,6 +2,29 @@ from __future__ import annotations
 
 from typing import List
 
+# 제품명 → 색상 키워드 매핑
+_NAME_COLOR_MAP = {
+    "블랙": "black", "검정": "black", "black": "black",
+    "화이트": "white", "흰색": "white", "white": "white",
+    "그레이": "gray", "회색": "gray", "gray": "gray", "그레": "gray",
+    "브라운": "brown", "원목": "brown", "brown": "brown", "우드": "brown",
+    "베이지": "beige", "베이쥐": "beige", "beige": "beige",
+    "그린": "green", "green": "green",
+    "네이비": "navy", "navy": "navy",
+    "옐로": "yellow", "yellow": "yellow",
+    "핑크": "pink", "pink": "pink",
+}
+
+
+def _colors_from_name(name: str) -> set:
+    """제품명에서 색상 키워드를 추론한다."""
+    name_lower = name.lower()
+    found = set()
+    for kw, color in _NAME_COLOR_MAP.items():
+        if kw.lower() in name_lower:
+            found.add(color)
+    return found
+
 
 def style_score(item: dict, mood: str, purpose: str, pref_colors: List[str] = [], pref_materials: List[str] = []) -> float:
     mood_tokens = set(mood.lower().replace("-", "_").split("_"))
@@ -12,11 +35,14 @@ def style_score(item: dict, mood: str, purpose: str, pref_colors: List[str] = []
     score += 0.5 * (len(tags & mood_tokens) / max(1, len(mood_tokens)))
     score += 0.3 * (len(tags & purpose_tokens) / max(1, len(purpose_tokens)))
 
-    # 색상/소재 선호도 보너스 (enriched 데이터 있을 때)
+    # 색상 선호도 보너스: colors 필드 + 제품명 추론 모두 사용
     if pref_colors:
         item_colors = set(c.lower() for c in item.get("colors", []))
+        item_colors |= _colors_from_name(item.get("name", ""))
         if item_colors & set(c.lower() for c in pref_colors):
-            score += 0.15
+            score += 0.20
+
+    # 소재 선호도 보너스
     if pref_materials:
         item_mats = set(m.lower() for m in item.get("materials", []))
         if item_mats & set(m.lower() for m in pref_materials):
@@ -49,6 +75,26 @@ def recommend(room: dict, required_categories: List[str], catalog: List[dict],
     for cat in required_categories:
         candidates = [i for i in catalog if i["category"] == cat and i["price_krw"] <= room["budget_krw"]]
         if not candidates:
+            # 예산 초과 시 가장 저렴한 항목 최대 3개를 over_budget 플래그와 함께 포함
+            over = sorted(
+                [i for i in catalog if i["category"] == cat],
+                key=lambda x: x["price_krw"]
+            )[:ITEMS_PER_CATEGORY]
+            for rank, item in enumerate(over):
+                selected.append({
+                    "id": item["id"],
+                    "name": item["name"],
+                    "category": item["category"],
+                    "price_krw": item["price_krw"],
+                    "dimensions_cm": {"width": item["width_cm"], "depth": item["depth_cm"], "height": item["height_cm"]},
+                    "source": item["source"],
+                    "url": item["url"],
+                    "image_url": item.get("image_url", ""),
+                    "score": 0.0,
+                    "rank": rank + 1,
+                    "reason": "예산 초과 — 가장 저렴한 옵션",
+                    "over_budget": True,
+                })
             continue
 
         scored = []

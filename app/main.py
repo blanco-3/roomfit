@@ -345,6 +345,7 @@ def recommendations(
     result = recommend(room, payload.required_categories, load_catalog())
     run_id = save_recommendation(payload.room_id, result, idempotency_key=idempotency_key)
     result["run_id"] = run_id
+    result["alternatives"] = [i for i in result["items"] if i.get("rank", 1) > 1]
     result["room_estimation"] = {
         "source": room.get("estimate_source", "manual"),
         "confidence": room.get("estimate_confidence"),
